@@ -1,6 +1,6 @@
 """User authentication endpoints"""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -135,13 +135,13 @@ async def clerk_auth_check(
 ) -> Any:
     """
     Verify Clerk authentication and return access/refresh tokens.
-    
+
     This endpoint:
     1. Validates the Clerk JWT token from Next.js
     2. Gets or creates the user in the local database
     3. Issues access and refresh tokens for your system
     4. Returns tokens and user data
-    
+
     Usage:
         Authorization: Bearer <clerk_jwt_token>
     """
@@ -274,7 +274,7 @@ async def refresh_token(
         )
 
     # Check if refresh token is expired
-    if session.refresh_expires_at < datetime.now(UTC):
+    if session.refresh_expires_at < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token has expired",
@@ -300,14 +300,14 @@ async def refresh_token(
     new_refresh_payload = verify_user_refresh_token(new_refresh_token)
 
     new_access_expires = (
-        datetime.fromtimestamp(new_access_payload["exp"], tz=UTC)
+        datetime.fromtimestamp(new_access_payload["exp"], tz=timezone.utc)
         if new_access_payload
-        else datetime.now(UTC) + timedelta(minutes=settings.USER_ACCESS_TOKEN_EXPIRE_MINUTES)
+        else datetime.now(timezone.utc) + timedelta(minutes=settings.USER_ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     new_refresh_expires = (
-        datetime.fromtimestamp(new_refresh_payload["exp"], tz=UTC)
+        datetime.fromtimestamp(new_refresh_payload["exp"], tz=timezone.utc)
         if new_refresh_payload
-        else datetime.now(UTC) + timedelta(days=settings.USER_REFRESH_TOKEN_EXPIRE_DAYS)
+        else datetime.now(timezone.utc) + timedelta(days=settings.USER_REFRESH_TOKEN_EXPIRE_DAYS)
     )
 
     # Update session with new tokens
@@ -316,7 +316,7 @@ async def refresh_token(
     session.access_token_jti = new_access_jti
     session.access_expires_at = new_access_expires
     session.refresh_expires_at = new_refresh_expires
-    session.last_activity = datetime.now(UTC)
+    session.last_activity = datetime.now(timezone.utc)
 
     await db.commit()
 

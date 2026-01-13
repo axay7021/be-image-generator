@@ -2,7 +2,7 @@
 
 import random
 import string
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import delete, desc, select
@@ -564,14 +564,14 @@ async def create_user_session(user: User, request: Request, db: AsyncSession) ->
     refresh_payload = verify_user_refresh_token(refresh_token)
 
     access_expires = (
-        datetime.fromtimestamp(access_payload["exp"], tz=UTC)
+        datetime.fromtimestamp(access_payload["exp"], tz=timezone.utc)
         if access_payload
-        else datetime.now(UTC) + timedelta(minutes=settings.USER_ACCESS_TOKEN_EXPIRE_MINUTES)
+        else datetime.now(timezone.utc) + timedelta(minutes=settings.USER_ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     refresh_expires = (
-        datetime.fromtimestamp(refresh_payload["exp"], tz=UTC)
+        datetime.fromtimestamp(refresh_payload["exp"], tz=timezone.utc)
         if refresh_payload
-        else datetime.now(UTC) + timedelta(days=settings.USER_REFRESH_TOKEN_EXPIRE_DAYS)
+        else datetime.now(timezone.utc) + timedelta(days=settings.USER_REFRESH_TOKEN_EXPIRE_DAYS)
     )
 
     # Create new session
@@ -637,7 +637,7 @@ async def request_password_reset(email: str, db: AsyncSession) -> str | None:
     otp = "".join(random.choices(string.digits, k=6))
 
     # Save OTP
-    expiration = datetime.now(UTC) + timedelta(minutes=10)
+    expiration = datetime.now(timezone.utc) + timedelta(minutes=10)
     email_otp = EmailOTP(
         email=email,
         otp_code=otp,
@@ -667,7 +667,7 @@ async def verify_password_reset_otp(email: str, otp: str, db: AsyncSession) -> t
             EmailOTP.otp_code == otp,
             EmailOTP.purpose == OTPPurpose.PASSWORD_RESET,
             EmailOTP.is_used.is_(False),
-            EmailOTP.expires_at > datetime.now(UTC),
+            EmailOTP.expires_at > datetime.now(timezone.utc),
         )
         .order_by(desc(EmailOTP.created_at))
         .limit(1)
@@ -695,7 +695,7 @@ async def reset_password_with_otp(email: str, otp: str, new_password: str, db: A
             EmailOTP.otp_code == otp,
             EmailOTP.purpose == OTPPurpose.PASSWORD_RESET,
             EmailOTP.is_used.is_(False),
-            EmailOTP.expires_at > datetime.now(UTC),
+            EmailOTP.expires_at > datetime.now(timezone.utc),
         )
         .order_by(desc(EmailOTP.created_at))
         .limit(1)

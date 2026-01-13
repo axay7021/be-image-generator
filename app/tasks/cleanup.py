@@ -1,6 +1,6 @@
 """Background tasks for database cleanup"""
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +19,7 @@ async def cleanup_expired_tokens(db: AsyncSession) -> int:
     Returns:
         int: Number of tokens deleted
     """
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
 
     # Delete all tokens that have expired
     result = await db.execute(delete(ActiveToken).where(ActiveToken.expires_at < now))

@@ -1,6 +1,6 @@
 """Admin service for authentication and management"""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import delete, desc, select, update
@@ -125,7 +125,7 @@ async def authenticate_admin(email: str, password: str, request: Request, db: As
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate refresh token",
         )
-    refresh_expires = datetime.fromtimestamp(refresh_payload["exp"], tz=UTC)
+    refresh_expires = datetime.fromtimestamp(refresh_payload["exp"], tz=timezone.utc)
 
     # Create refresh token record
     refresh_token = RefreshToken(
@@ -156,7 +156,7 @@ async def authenticate_admin(email: str, password: str, request: Request, db: As
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate access token",
         )
-    access_expires = datetime.fromtimestamp(access_payload["exp"], tz=UTC)
+    access_expires = datetime.fromtimestamp(access_payload["exp"], tz=timezone.utc)
 
     active_token = ActiveToken(jti=access_jti, admin_id=admin.id, expires_at=access_expires)
     db.add(active_token)
@@ -209,9 +209,9 @@ async def refresh_admin_token(refresh_token_str: str, authorization: str, db: As
     # Check if token is expired
     expires_at = stored_token.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=UTC)
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
 
-    if expires_at < datetime.now(UTC):
+    if expires_at < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token has expired",
@@ -245,7 +245,7 @@ async def refresh_admin_token(refresh_token_str: str, authorization: str, db: As
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate access token",
         )
-    access_expires = datetime.fromtimestamp(access_payload["exp"], tz=UTC)
+    access_expires = datetime.fromtimestamp(access_payload["exp"], tz=timezone.utc)
 
     new_active_token = ActiveToken(jti=new_access_jti, admin_id=admin.id, expires_at=access_expires)
     db.add(new_active_token)
@@ -263,7 +263,7 @@ async def refresh_admin_token(refresh_token_str: str, authorization: str, db: As
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate refresh token",
         )
-    new_refresh_expires = datetime.fromtimestamp(new_refresh_payload["exp"], tz=UTC)
+    new_refresh_expires = datetime.fromtimestamp(new_refresh_payload["exp"], tz=timezone.utc)
 
     new_refresh_token = RefreshToken(
         admin_id=admin.id,
@@ -333,7 +333,7 @@ async def request_password_reset(email: str, db: AsyncSession) -> str | None:
             email=email,
             otp_code=hash_otp(otp),
             purpose=OTPPurpose.PASSWORD_RESET,
-            expires_at=datetime.now(UTC) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES),
         )
         db.add(email_otp)
         await db.commit()
@@ -368,7 +368,7 @@ async def verify_password_reset_otp(email: str, otp: str, db: AsyncSession) -> t
         return False, msg("OTP_INVALID")
 
     # Check expiry
-    if otp_record.expires_at < datetime.now(UTC):
+    if otp_record.expires_at < datetime.now(timezone.utc):
         return False, msg("OTP_EXPIRED")
 
     # Check attempts
@@ -403,7 +403,7 @@ async def reset_password(email: str, otp: str, new_password: str, db: AsyncSessi
     result = await db.execute(query)
     otp_record = result.scalar_one_or_none()
 
-    if not otp_record or otp_record.expires_at < datetime.now(UTC):
+    if not otp_record or otp_record.expires_at < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired OTP",

@@ -1,7 +1,7 @@
 import secrets
 import string
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import jwt
 from pwdlib import PasswordHash
@@ -38,9 +38,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> t
     jti = str(uuid.uuid4())  # Unique token identifier
 
     if expires_delta:
-        expire = datetime.now(UTC) + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire, "type": "access", "jti": jti})
     encoded_jwt = jwt.encode(to_encode, settings.ADMIN_JWT_SECRET, algorithm="HS256")
     return encoded_jwt, jti
@@ -58,9 +58,9 @@ def create_refresh_token(admin_id: str, expires_delta: timedelta | None = None) 
         str: Encoded refresh token
     """
     if expires_delta:
-        expire = datetime.now(UTC) + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
     to_encode = {"sub": admin_id, "exp": expire, "type": "refresh", "jti": str(uuid.uuid4())}
     encoded_jwt = jwt.encode(to_encode, settings.ADMIN_JWT_SECRET_REF, algorithm="HS256")
@@ -130,9 +130,9 @@ def create_user_access_token(data: dict, expires_delta: timedelta | None = None)
     jti = str(uuid.uuid4())  # Unique token identifier
 
     if expires_delta:
-        expire = datetime.now(UTC) + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(UTC) + timedelta(minutes=settings.USER_ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.USER_ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire, "type": "user_access", "jti": jti})
     encoded_jwt = jwt.encode(to_encode, settings.USER_JWT_SECRET, algorithm="HS256")
     return encoded_jwt, jti
@@ -150,9 +150,9 @@ def create_user_refresh_token(user_id: str, expires_delta: timedelta | None = No
         str: Encoded refresh token
     """
     if expires_delta:
-        expire = datetime.now(UTC) + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(UTC) + timedelta(days=settings.USER_REFRESH_TOKEN_EXPIRE_DAYS)
+        expire = datetime.now(timezone.utc) + timedelta(days=settings.USER_REFRESH_TOKEN_EXPIRE_DAYS)
 
     to_encode = {"sub": user_id, "exp": expire, "type": "user_refresh", "jti": str(uuid.uuid4())}
     encoded_jwt = jwt.encode(to_encode, settings.USER_JWT_SECRET_REF, algorithm="HS256")
