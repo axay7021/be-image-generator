@@ -10,7 +10,7 @@ name = "image-modifier"
 version = "0.1.0"
 description = "Image Modifier"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "alembic>=1.17.2",
     "apscheduler>=3.11.1",
@@ -48,7 +48,7 @@ dependencies = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py313"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "PL"]
