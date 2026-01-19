@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     # Clerk Authentication (Next.js Frontend)
     # Only CLERK_SECRET_KEY is required - get it from https://dashboard.clerk.com
     CLERK_SECRET_KEY: str = ""
+    CLERK_WEBHOOK_SECRET: str = ""
     CLERK_PUBLISHABLE_KEY: str = ""  # Optional, for frontend reference
     CLERK_JWKS_URL: str = ""  # Optional fallback, auto-derived from secret key
 

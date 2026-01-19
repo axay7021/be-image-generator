@@ -6,6 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.tasks.cleanup import cleanup_all
+from app.tasks.expire_subscriptions import expire_old_subscriptions
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +32,18 @@ def start_scheduler():
         name="Cleanup expired access tokens",
         replace_existing=True,
     )
+    
+    # Schedule subscription expiration check to run daily at 2 AM
+    scheduler.add_job(
+        expire_old_subscriptions,
+        trigger=CronTrigger(hour=2, minute=0),
+        id="expire_subscriptions",
+        name="Expire old subscriptions",
+        replace_existing=True,
+    )
 
     scheduler.start()
-    logger.info("Scheduler started - Cleanup will run daily at 3:00 AM")
+    logger.info("Scheduler started - Cleanup will run daily at 3:00 AM, Subscription expiration at 2:00 AM")
 
 
 def stop_scheduler():

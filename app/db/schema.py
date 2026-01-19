@@ -34,10 +34,11 @@ class UserGender(str, PyEnum):
 
 
 class CreatedVia(str, PyEnum):
-    WEB = "web"
-    LINE = "line"
-    AI_CALL = "ai_call"
-    GOOGLE = "google"
+    WEB = "WEB"
+    LINE = "LINE"
+    AI_CALL = "AI_CALL"
+    GOOGLE = "GOOGLE"
+    CLERK = "CLERK"
 
 
 class AdminRole(str, PyEnum):
@@ -121,6 +122,9 @@ class User(Base):
     # Google Integration
     google_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Clerk Integration
+    clerk_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
 
     # LINE Integration (optional - for LINE mini app users)
     line_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
@@ -338,6 +342,8 @@ class Plan(Base):
     price_usd: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     image_quota: Mapped[int] = mapped_column(Integer, nullable=False)
     stripe_price_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    billing_interval: Mapped[str | None] = mapped_column(String(20), nullable=True)  # e.g., "month", "year", None for one-time
+    validity_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)  # Plan validity period (e.g., 30, 180 days)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -359,10 +365,10 @@ class Subscription(Base):
     stripe_subscription_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default="active", index=True
-    )  # active, canceled, past_due
+    )  # active, quota_exhausted, expired, canceled
     quota_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)  # Expiration date
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

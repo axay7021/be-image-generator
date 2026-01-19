@@ -47,69 +47,52 @@ async def get_clerk_user(
         )
 
     try:
-        # Method 1: Using Clerk's verify_token API (recommended)
+        # Method 1: Decode JWT and verify manually using JWKS
+        # Clerk tokens are standard JWTs that can be verified using the issuer's JWKS
         try:
-            # Verify token using Clerk's backend API
-            verified_token = clerk_client.tokens.verify(token)
+            # First, decode without verification to get the issuer
+            decoded_unverified = jwt.decode(token, options={"verify_signature": False})
             
-            # Extract user_id from the verified token
-            # The sub claim contains the Clerk user ID
-            if hasattr(verified_token, 'sub'):
-                user_id = verified_token.sub
-            elif hasattr(verified_token, 'user_id'):
-                user_id = verified_token.user_id
-            else:
-                # Fallback: decode to get claims
-                decoded = jwt.decode(token, options={"verify_signature": False})
-                user_id = decoded.get("sub")
+            # Get the issuer from the token (e.g., https://clerk.your-domain.com)
+            issuer = decoded_unverified.get("iss")
+            if not issuer:
+                raise ValueError("Token missing issuer (iss) claim")
             
+            # Construct JWKS URL from issuer
+            jwks_url = f"{issuer}/.well-known/jwks.json"
+            
+            # Import PyJWKClient for JWKS verification
+            from jwt import PyJWKClient
+            
+            # Get signing key from JWKS
+            jwks_client = PyJWKClient(jwks_url)
+            signing_key = jwks_client.get_signing_key_from_jwt(token)
+            
+            # Verify and decode token with full validation
+            decoded = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256"],
+                options={"verify_exp": True, "verify_aud": False},
+            )
+            
+            # Extract user_id from the 'sub' claim
+            user_id = decoded.get("sub")
             if not user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid token: missing user identifier",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                raise ValueError("Token missing 'sub' claim (user ID)")
                 
             return user_id
             
-        except Exception as clerk_error:
-            # Fallback to manual JWT verification if Clerk API fails
-            # This requires the JWKS URL to be configured (optional)
-            if settings.CLERK_JWKS_URL and settings.CLERK_JWKS_URL.startswith("https://"):
-                try:
-                    import requests
-                    from jwt import PyJWKClient
-                    
-                    # Get signing key from JWKS
-                    jwks_client = PyJWKClient(settings.CLERK_JWKS_URL)
-                    signing_key = jwks_client.get_signing_key_from_jwt(token)
-                    
-                    # Verify and decode token
-                    decoded = jwt.decode(
-                        token,
-                        signing_key.key,
-                        algorithms=["RS256"],
-                        options={"verify_exp": True, "verify_aud": False},
-                    )
-                    
-                    user_id = decoded.get("sub")
-                    if not user_id:
-                        raise ValueError("Missing 'sub' claim in token")
-                        
-                    return user_id
-                    
-                except Exception as jwks_error:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail=f"Token verification failed: {str(jwks_error)}",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    ) from jwks_error
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail=f"Token verification failed: {str(clerk_error)}",
-                    headers={"WWW-Authenticate": "Bearer"},
-                ) from clerk_error
+        except Exception as jwt_error:
+            # Log the error for debugging
+            from app.core.logger import logger
+            logger.error(f"Clerk token verification failed: {str(jwt_error)}")
+            
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Token verification failed: {str(jwt_error)}",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from jwt_error
 
     except jwt.ExpiredSignatureError as e:
         raise HTTPException(

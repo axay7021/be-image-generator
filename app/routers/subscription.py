@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from typing import Annotated, Any
 
@@ -43,7 +44,11 @@ async def create_plan(
         raise HTTPException(status_code=400, detail="Plan with this name already exists")
 
     new_plan = Plan(
-        name=data.name, price_usd=data.price_usd, image_quota=data.image_quota, stripe_price_id=data.stripe_price_id
+        name=data.name, 
+        price_usd=data.price_usd, 
+        image_quota=data.image_quota, 
+        stripe_price_id=data.stripe_price_id,
+        validity_days=data.validity_days
     )
     db.add(new_plan)
     await db.commit()
@@ -92,20 +97,28 @@ async def create_checkout_session(
         success_url = f"{base_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}"
         cancel_url = f"{base_url}/subscription/cancel"
 
-        checkout_session = stripe.checkout.Session.create(
+        mode = "subscription" if plan.billing_interval else "payment"
+
+        # Run blocking Stripe call in a thread to avoid freezing the event loop
+        print(f"DEBUG: Calling Stripe Session.create with mode={mode}, price={plan.stripe_price_id}")
+        checkout_session = await asyncio.to_thread(
+            stripe.checkout.Session.create,
             payment_method_types=["card"],
             line_items=[{"price": plan.stripe_price_id, "quantity": 1}],
-            mode="subscription",
+            mode=mode,
             success_url=success_url,
             cancel_url=cancel_url,
             customer_email=user.email,
             client_reference_id=str(user.id),
             metadata={"plan_id": str(plan.id), "user_id": str(user.id)},
         )
+        print(f"DEBUG: Stripe Session created: {checkout_session.url}")
 
         return success_response(data={"url": checkout_session.url}, message="Checkout session created")
 
     except Exception as e:
+        from app.core.logger import logger
+        logger.error(f"Checkout session creation failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
@@ -115,7 +128,11 @@ async def get_my_subscription(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Get current user's active subscription"""
-    query = select(Subscription).where(Subscription.user_id == user.id, Subscription.status == "active").limit(1)
+    # Include both 'active' and 'quota_exhausted' statuses
+    query = select(Subscription).where(
+        Subscription.user_id == user.id, 
+        Subscription.status.in_(["active", "quota_exhausted"])
+    ).limit(1)
     # Join with Plan to get details?
     # Actually, let's eager load plan
     # But for now, simple select
@@ -182,9 +199,21 @@ async def handle_checkout_completed(session, db: AsyncSession):
     user_id = session.get("client_reference_id")
     plan_id = session.get("metadata", {}).get("plan_id")
     stripe_sub_id = session.get("subscription")
+    
+    from app.core.logger import logger
+    from datetime import timedelta
 
     if not user_id or not plan_id:
-        return  # Should log error
+        logger.error(f"Missing user_id or plan_id in checkout session: {session}")
+        return
+
+    logger.info(f"Processing checkout for user {user_id}, plan {plan_id}")
+    
+    # Get the plan to know the validity period
+    plan = await db.get(Plan, plan_id)
+    if not plan:
+        logger.error(f"Plan {plan_id} not found")
+        return
 
     # Deactivate old active subscriptions
     stmt = select(Subscription).where(Subscription.user_id == user_id, Subscription.status == "active")
@@ -192,19 +221,29 @@ async def handle_checkout_completed(session, db: AsyncSession):
     old_subs = result.scalars().all()
     for sub in old_subs:
         sub.status = "canceled"
-        # Ideally we cancel in Stripe too, but let's assume one sub per user logic enforcement later
+        logger.info(f"Canceled old subscription {sub.id}")
 
+    # Set period dates based on plan validity
+    now = datetime.now()
+    expiration_date = now + timedelta(days=plan.validity_days)
+    
+    # For one-time payments (no subscription ID)
+    if not stripe_sub_id:
+        stripe_sub_id = f"one_time_{session.get('id')}"
+        logger.info(f"One-time payment, using ID: {stripe_sub_id}")
+    
     new_sub = Subscription(
         user_id=user_id,
         plan_id=plan_id,
         stripe_subscription_id=stripe_sub_id,
         status="active",
         quota_used=0,
-        period_start=datetime.now(),  # specific parsing needed from invoice usually
-        period_end=datetime.now(),  # placeholder, update via invoice
+        period_start=now,
+        period_end=expiration_date,  # Set expiration based on plan validity
     )
     db.add(new_sub)
     await db.commit()
+    logger.info(f"Created subscription {stripe_sub_id} for user {user_id}, expires on {expiration_date}")
 
 
 async def handle_payment_succeeded(invoice, db: AsyncSession):
@@ -212,16 +251,19 @@ async def handle_payment_succeeded(invoice, db: AsyncSession):
     if not stripe_sub_id:
         return
 
+    from app.core.logger import logger
+
     stmt = select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub_id)
     result = await db.execute(stmt)
     sub = result.scalar_one_or_none()
 
     if sub:
         sub.quota_used = 0  # Reset quota
-        sub.status = "active"
+        sub.status = "active"  # Reactivate if it was quota_exhausted
         sub.period_start = datetime.fromtimestamp(invoice["period_start"])
         sub.period_end = datetime.fromtimestamp(invoice["period_end"])
         await db.commit()
+        logger.info(f"Subscription {stripe_sub_id} reactivated with quota reset")
 
 
 async def handle_subscription_deleted(subscription_obj, db: AsyncSession):
