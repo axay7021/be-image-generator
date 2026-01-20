@@ -6,6 +6,7 @@ import stripe
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.core.settings import settings
 from app.db import get_db
@@ -149,6 +150,27 @@ async def get_my_subscription(
 
     return success_response(
         data=SubscriptionResponse.model_validate(sub).model_dump(), message="Subscription retrieved"
+    )
+
+
+@router.get("/my-subscription-history", status_code=status.HTTP_200_OK)
+async def get_my_subscription_history(
+    user: Annotated[User, Depends(get_current_active_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Get all subscriptions for the current user (history)"""
+    query = (
+        select(Subscription)
+        .options(joinedload(Subscription.plan))
+        .where(Subscription.user_id == user.id)
+        .order_by(Subscription.created_at.desc())
+    )
+    result = await db.execute(query)
+    subs = result.scalars().all()
+
+    return success_response(
+        data=[SubscriptionResponse.model_validate(sub).model_dump() for sub in subs],
+        message="Subscription history retrieved",
     )
 
 

@@ -28,7 +28,9 @@ class SubscriptionResponse(BaseModel):
     status: str
     image_generation_limit: int
     quota_used: int
+    period_start: datetime
     period_end: datetime
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
