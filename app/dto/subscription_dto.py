@@ -1,5 +1,6 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PlanBase(BaseModel):
@@ -8,6 +9,7 @@ class PlanBase(BaseModel):
     image_quota: int = Field(..., description="Number of images allowed")
     stripe_price_id: str = Field(..., description="Stripe Price ID")
     validity_days: int = Field(default=30, description="Plan validity in days (e.g., 30, 180)")
+    is_popular: bool = Field(default=False, description="Whether this is a popular plan")
 
 
 class PlanCreateRequest(PlanBase):

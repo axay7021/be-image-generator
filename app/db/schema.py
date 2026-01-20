@@ -348,6 +348,7 @@ class Plan(Base):
     validity_days: Mapped[int] = mapped_column(
         Integer, nullable=False, default=30
     )  # Plan validity period (e.g., 30, 180 days)
+    is_popular: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
