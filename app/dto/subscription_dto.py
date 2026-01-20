@@ -26,6 +26,7 @@ class SubscriptionResponse(BaseModel):
     id: str
     plan: PlanResponse
     status: str
+    image_generation_limit: int
     quota_used: int
     period_end: datetime
 

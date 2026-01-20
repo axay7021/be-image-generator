@@ -44,11 +44,11 @@ async def create_plan(
         raise HTTPException(status_code=400, detail="Plan with this name already exists")
 
     new_plan = Plan(
-        name=data.name, 
-        price_usd=data.price_usd, 
-        image_quota=data.image_quota, 
+        name=data.name,
+        price_usd=data.price_usd,
+        image_quota=data.image_quota,
         stripe_price_id=data.stripe_price_id,
-        validity_days=data.validity_days
+        validity_days=data.validity_days,
     )
     db.add(new_plan)
     await db.commit()
@@ -118,6 +118,7 @@ async def create_checkout_session(
 
     except Exception as e:
         from app.core.logger import logger
+
         logger.error(f"Checkout session creation failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -129,10 +130,11 @@ async def get_my_subscription(
 ):
     """Get current user's active subscription"""
     # Include both 'active' and 'quota_exhausted' statuses
-    query = select(Subscription).where(
-        Subscription.user_id == user.id, 
-        Subscription.status.in_(["active", "quota_exhausted"])
-    ).limit(1)
+    query = (
+        select(Subscription)
+        .where(Subscription.user_id == user.id, Subscription.status.in_(["active", "quota_exhausted"]))
+        .limit(1)
+    )
     # Join with Plan to get details?
     # Actually, let's eager load plan
     # But for now, simple select
@@ -199,7 +201,7 @@ async def handle_checkout_completed(session, db: AsyncSession):
     user_id = session.get("client_reference_id")
     plan_id = session.get("metadata", {}).get("plan_id")
     stripe_sub_id = session.get("subscription")
-    
+
     from app.core.logger import logger
     from datetime import timedelta
 
@@ -208,7 +210,7 @@ async def handle_checkout_completed(session, db: AsyncSession):
         return
 
     logger.info(f"Processing checkout for user {user_id}, plan {plan_id}")
-    
+
     # Get the plan to know the validity period
     plan = await db.get(Plan, plan_id)
     if not plan:
@@ -226,12 +228,12 @@ async def handle_checkout_completed(session, db: AsyncSession):
     # Set period dates based on plan validity
     now = datetime.now()
     expiration_date = now + timedelta(days=plan.validity_days)
-    
+
     # For one-time payments (no subscription ID)
     if not stripe_sub_id:
         stripe_sub_id = f"one_time_{session.get('id')}"
         logger.info(f"One-time payment, using ID: {stripe_sub_id}")
-    
+
     new_sub = Subscription(
         user_id=user_id,
         plan_id=plan_id,
@@ -240,6 +242,7 @@ async def handle_checkout_completed(session, db: AsyncSession):
         quota_used=0,
         period_start=now,
         period_end=expiration_date,  # Set expiration based on plan validity
+        image_generation_limit=plan.image_quota,
     )
     db.add(new_sub)
     await db.commit()
