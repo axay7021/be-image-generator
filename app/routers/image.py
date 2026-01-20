@@ -156,18 +156,15 @@ async def upscale_image(
     user: Annotated[User | None, Depends(get_current_user_optional)] = None,
 ):
     try:
-        # 1. Access Control: Paid Users Only
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Upscaling is a premium feature. Please sign in and subscribe to a plan.",
-            )
-
         # 2. Resolution & Cost Logic
         target_width = 0
         cost = 0
+        is_original = False
 
-        if target_resolution == "2K":
+        if target_resolution == "Original":
+            cost = 0
+            is_original = True
+        elif target_resolution == "2K":
             target_width = 2560
             cost = 2
         elif target_resolution == "4K":
@@ -176,7 +173,14 @@ async def upscale_image(
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid resolution. Supported options: '2K', '4K'.",
+                detail="Invalid resolution. Supported options: 'Original', '2K', '4K'.",
+            )
+
+        # 1. Access Control: Paid Users Only (SKIP for Original)
+        if not is_original and not user:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Upscaling is a premium feature. Please sign in and subscribe to a plan. You can download the Original for free.",
             )
 
         # 3. Check Quota (pre-deduction check)
@@ -189,19 +193,22 @@ async def upscale_image(
         if img is None:
             raise ValueError("Could not decode image")
 
-        # Calculate height to maintain aspect ratio
-        original_height, original_width = img.shape[:2]
-        aspect_ratio = original_height / original_width
-        target_height = int(target_width * aspect_ratio)
+        final_img = img
 
-        # High Quality Upscaling (Lanczos)
-        upscaled_img = cv2.resize(img, (target_width, target_height), interpolation=cv2.INTER_LANCZOS4)
+        if not is_original:
+            # Calculate height to maintain aspect ratio
+            original_height, original_width = img.shape[:2]
+            aspect_ratio = original_height / original_width
+            target_height = int(target_width * aspect_ratio)
 
-        # Apply Sharpening
-        gaussian = cv2.GaussianBlur(upscaled_img, (0, 0), 2.0)
-        sharpened = cv2.addWeighted(upscaled_img, 1.5, gaussian, -0.5, 0)
+            # High Quality Upscaling (Lanczos)
+            upscaled_img = cv2.resize(img, (target_width, target_height), interpolation=cv2.INTER_LANCZOS4)
 
-        _, encoded_img = cv2.imencode(".png", sharpened)
+            # Apply Sharpening
+            gaussian = cv2.GaussianBlur(upscaled_img, (0, 0), 2.0)
+            sharpened = cv2.addWeighted(upscaled_img, 1.5, gaussian, -0.5, 0)
+            final_img = sharpened
+        _, encoded_img = cv2.imencode(".png", final_img)
 
         # 4. Deduct Quota
         await increment_quota(request, db, user, cost=cost)
