@@ -151,11 +151,37 @@ async def validate_image(file: UploadFile = File(...)):
 async def upscale_image(
     request: Request,
     file: UploadFile = File(...),
-    target_width: int = Form(...),
+    target_resolution: str = Form(..., description="Target resolution: '2K' or '4K'"),
     db: Annotated[AsyncSession, Depends(get_db)] = None,
     user: Annotated[User | None, Depends(get_current_user_optional)] = None,
 ):
     try:
+        # 1. Access Control: Paid Users Only
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Upscaling is a premium feature. Please sign in and subscribe to a plan.",
+            )
+
+        # 2. Resolution & Cost Logic
+        target_width = 0
+        cost = 0
+
+        if target_resolution == "2K":
+            target_width = 2560
+            cost = 2
+        elif target_resolution == "4K":
+            target_width = 3840
+            cost = 4
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid resolution. Supported options: '2K', '4K'.",
+            )
+
+        # 3. Check Quota (pre-deduction check)
+        await check_quota(request, db, user, cost=cost)
+
         image_bytes = await file.read()
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -177,8 +203,8 @@ async def upscale_image(
 
         _, encoded_img = cv2.imencode(".png", sharpened)
 
-        # No quota increment for local upscaling
-        # await increment_quota(request, db, user)
+        # 4. Deduct Quota
+        await increment_quota(request, db, user, cost=cost)
 
         # Log to ImageLog
         log_entry = ImageLog(
@@ -228,15 +254,6 @@ async def modify_image(
         prompt = ""
         safety_instruction = (
             " CRITICAL INSTRUCTION: Preserve the person's face exactly as is. Do not alter facial features."
-        )
-
-        # Realism Constraint Block for LinkedIn Profiles
-        realism_constraint = (
-            " CRITICAL REALISM CONSTRAINT: The final image must look like a real photograph taken with a DSLR camera. "
-            "1. SKIN TEXTURE: You MUST preserve the natural texture, pores, and micro-details of the skin. Do NOT smooth or airbrush. "
-            "2. LIGHTING: Use professional studio lighting techniques suited to the style. "
-            "3. NO AI LOOK: The image should not look illustration-like, waxy, or hyper-perfect. "
-            "4. IDENTITY: The person's facial identity must remain 100% strictly matched to the source."
         )
 
         if action == "remove-bg":
@@ -447,6 +464,13 @@ async def modify_image(
                 prompt += f" ADDITIONAL USER REQUIREMENTS: {extra_context}"
 
         prompt += safety_instruction
+
+        # Global Negative Prompt / Brand Safety
+        prompt += (
+            " FINAL STYLIZATION RULE: The output image must be completely clean and strictly photorealistic. "
+            "ABSOLUTELY NO watermarks, logos, text overlays, brand identifiers, icons, or graphic elements of any kind. "
+            "If any such elements are detected in the source, they must be seamlessly removed."
+        )
 
         modified_image_data, cost_info = process_gemini_image(image_bytes, prompt)
 

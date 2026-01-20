@@ -16,6 +16,7 @@ async def check_quota(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User | None, Depends(get_current_user_optional)],
+    cost: int = 1,
 ) -> int:
     """
     Check if the user (or anonymous IP) has sufficient quota.
@@ -30,6 +31,10 @@ async def check_quota(
 
     # 1. Anonymous User
     if not user:
+        if cost > 1:
+            raise QuotaLimitExceeded(
+                detail="High-resolution features require an active subscription. Please sign in or subscribe."
+            )
         print("DEBUG: Anonymous user check.")
         client_ip = request.client.host if request.client else "unknown"
         # Check daily usage
@@ -89,6 +94,10 @@ async def check_quota(
     await db.commit()
 
     if active_plans_count > 0:
+        if total_remaining < cost:
+            raise QuotaLimitExceeded(
+                detail=f"Insufficient quota. This action requires {cost} credits, but you only have {total_remaining} remaining."
+            )
         print(f"DEBUG: User has {active_plans_count} active plans. Total remaining quota: {total_remaining}")
         return total_remaining
 
@@ -118,6 +127,7 @@ async def increment_quota(
     request: Request,
     db: AsyncSession,
     user: User | None,
+    cost: int = 1,
 ):
     """
     Increment usage counter after successful generation.
@@ -132,9 +142,9 @@ async def increment_quota(
         daily_usage = result.scalar_one_or_none()
 
         if daily_usage:
-            daily_usage.usage_count += 1
+            daily_usage.usage_count += cost
         else:
-            daily_usage = DailyUsage(identifier=client_ip, date=today, usage_count=1)
+            daily_usage = DailyUsage(identifier=client_ip, date=today, usage_count=cost)
             db.add(daily_usage)
 
     else:
@@ -153,32 +163,40 @@ async def increment_quota(
         subscriptions = result.scalars().all()
 
         quota_incremented = False
+        remaining_cost = cost
 
         for sub in subscriptions:
-            if sub.quota_used < sub.image_generation_limit:
-                sub.quota_used += 1
+            # How much can we take from this plan?
+            available_in_sub = sub.image_generation_limit - sub.quota_used
+
+            if available_in_sub > 0:
+                deduction = min(remaining_cost, available_in_sub)
+                sub.quota_used += deduction
+                remaining_cost -= deduction
                 quota_incremented = True
 
-                # Check for exhaustion immediately
+                # Check for exhaustion
                 if sub.quota_used >= sub.image_generation_limit:
                     sub.status = "quota_exhausted"
                     print(f"DEBUG: Subscription {sub.id} exhausted after usage.")
 
                 print(
-                    f"DEBUG: Incremented quota for subscription {sub.id}. Used: {sub.quota_used}/{sub.image_generation_limit}"
+                    f"DEBUG: Deducted {deduction} from subscription {sub.id}. Used: {sub.quota_used}/{sub.image_generation_limit}"
                 )
-                break
 
-        if not quota_incremented:
+                if remaining_cost <= 0:
+                    break
+
+        if not quota_incremented or remaining_cost > 0:
             # Fallback to daily usage by User ID
             query = select(DailyUsage).where(DailyUsage.identifier == str(user.id), DailyUsage.date == today)
             result = await db.execute(query)
             daily_usage = result.scalar_one_or_none()
 
             if daily_usage:
-                daily_usage.usage_count += 1
+                daily_usage.usage_count += cost
             else:
-                daily_usage = DailyUsage(identifier=str(user.id), date=today, usage_count=1)
+                daily_usage = DailyUsage(identifier=str(user.id), date=today, usage_count=cost)
                 db.add(daily_usage)
 
     await db.commit()
