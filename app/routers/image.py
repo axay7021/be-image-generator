@@ -154,7 +154,6 @@ async def upscale_image(
     target_width: int = Form(...),
     db: Annotated[AsyncSession, Depends(get_db)] = None,
     user: Annotated[User | None, Depends(get_current_user_optional)] = None,
-    quota_remaining: int = Depends(check_quota),  # Check quota first
 ):
     try:
         image_bytes = await file.read()
@@ -178,8 +177,8 @@ async def upscale_image(
 
         _, encoded_img = cv2.imencode(".png", sharpened)
 
-        # Increment quota and Log usage
-        await increment_quota(request, db, user)
+        # No quota increment for local upscaling
+        # await increment_quota(request, db, user)
 
         # Log to ImageLog
         log_entry = ImageLog(
