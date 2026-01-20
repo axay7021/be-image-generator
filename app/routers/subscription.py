@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Any
 
 import stripe
@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.logger import logger
 from app.core.settings import settings
 from app.db import get_db
 from app.db.schema import Plan, Subscription, User
@@ -129,28 +130,36 @@ async def get_my_subscription(
     user: Annotated[User, Depends(get_current_active_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Get current user's active subscription"""
-    # Include both 'active' and 'quota_exhausted' statuses
+    """Get current user's active subscription (aggregated)"""
+    # Fetch ALL active subscriptions
     query = (
         select(Subscription)
-        .where(Subscription.user_id == user.id, Subscription.status.in_(["active", "quota_exhausted"]))
-        .limit(1)
+        .where(Subscription.user_id == user.id, Subscription.status == "active")
+        .order_by(Subscription.created_at.asc())  # Oldest first
     )
-    # Join with Plan to get details?
-    # Actually, let's eager load plan
-    # But for now, simple select
 
     result = await db.execute(query)
-    sub = result.scalar_one_or_none()
+    subscriptions = result.scalars().all()
 
-    if not sub:
+    if not subscriptions:
         return success_response(data=None, message="No active subscription")
 
-    await db.refresh(sub, ["plan"])
+    # Calculate totals
+    total_limit = sum(sub.image_generation_limit for sub in subscriptions)
+    total_used = sum(sub.quota_used for sub in subscriptions)
 
-    return success_response(
-        data=SubscriptionResponse.model_validate(sub).model_dump(), message="Subscription retrieved"
-    )
+    # Use the first (oldest) subscription for metadata (plan details etc)
+    primary_sub = subscriptions[0]
+    await db.refresh(primary_sub, ["plan"])
+
+    # Create response object
+    response_data = SubscriptionResponse.model_validate(primary_sub)
+
+    # Override with aggregated totals
+    response_data.image_generation_limit = total_limit
+    response_data.quota_used = total_used
+
+    return success_response(data=response_data.model_dump(), message="Subscription retrieved")
 
 
 @router.get("/my-subscription-history", status_code=status.HTTP_200_OK)
@@ -224,9 +233,6 @@ async def handle_checkout_completed(session, db: AsyncSession):
     plan_id = session.get("metadata", {}).get("plan_id")
     stripe_sub_id = session.get("subscription")
 
-    from app.core.logger import logger
-    from datetime import timedelta
-
     if not user_id or not plan_id:
         logger.error(f"Missing user_id or plan_id in checkout session: {session}")
         return
@@ -239,13 +245,13 @@ async def handle_checkout_completed(session, db: AsyncSession):
         logger.error(f"Plan {plan_id} not found")
         return
 
-    # Deactivate old active subscriptions
-    stmt = select(Subscription).where(Subscription.user_id == user_id, Subscription.status == "active")
-    result = await db.execute(stmt)
-    old_subs = result.scalars().all()
-    for sub in old_subs:
-        sub.status = "canceled"
-        logger.info(f"Canceled old subscription {sub.id}")
+    # Deactivate old active subscriptions - REMOVED to allow stacking
+    # stmt = select(Subscription).where(Subscription.user_id == user_id, Subscription.status == "active")
+    # result = await db.execute(stmt)
+    # old_subs = result.scalars().all()
+    # for sub in old_subs:
+    #     sub.status = "canceled"
+    #     logger.info(f"Canceled old subscription {sub.id}")
 
     # Set period dates based on plan validity
     now = datetime.now()
@@ -275,8 +281,6 @@ async def handle_payment_succeeded(invoice, db: AsyncSession):
     stripe_sub_id = invoice.get("subscription")
     if not stripe_sub_id:
         return
-
-    from app.core.logger import logger
 
     stmt = select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub_id)
     result = await db.execute(stmt)

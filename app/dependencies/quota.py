@@ -51,42 +51,48 @@ async def check_quota(
 
     # 2. Authenticated User
     print(f"DEBUG: Authenticated user {user.id} check.")
-    # Check for active subscription (including quota_exhausted to show proper message)
-    query = select(Subscription).where(
-        Subscription.user_id == user.id, Subscription.status.in_(["active", "quota_exhausted"])
+
+    # Fetch ALL active subscriptions
+    # We also include 'quota_exhausted' to perform checks if they have renewed or just to catch them
+    # But checks below filter them.
+    query = (
+        select(Subscription)
+        .where(Subscription.user_id == user.id, Subscription.status == "active")
+        .order_by(Subscription.created_at.asc())
     )
+
     result = await db.execute(query)
-    subscription = result.scalar_one_or_none()
+    subscriptions = result.scalars().all()
 
-    if subscription:
-        # User has a subscription
-        # We need to fetch the plan to know the limit
-        await db.refresh(subscription, ["plan"])
+    total_remaining = 0
+    active_plans_count = 0
 
-        # Check if subscription has expired
-        if subscription.period_end < datetime.now(timezone.utc):
-            subscription.status = "expired"
-            await db.commit()
-            print(f"DEBUG: Subscription {subscription.id} expired on {subscription.period_end}")
-            raise QuotaLimitExceeded(detail=f"Your subscription has expired. Please purchase a new plan to continue.")
+    for sub in subscriptions:
+        # Check expiry
+        if sub.period_end < datetime.now(timezone.utc):
+            sub.status = "expired"
+            print(f"DEBUG: Subscription {sub.id} expired on {sub.period_end}")
+            continue
 
-        limit = subscription.image_generation_limit
-        used = subscription.quota_used
-        print(
-            f"DEBUG: Subscription found (status: {subscription.status}). Used: {used}/{limit}, expires: {subscription.period_end}"
-        )
+        # Check quota
+        if sub.quota_used >= sub.image_generation_limit:
+            sub.status = "quota_exhausted"
+            print(f"DEBUG: Subscription {sub.id} quota exhausted ({sub.quota_used}/{sub.image_generation_limit})")
+            continue
 
-        if used >= limit:
-            # Quota exhausted - deactivate subscription if not already
-            if subscription.status != "quota_exhausted":
-                subscription.status = "quota_exhausted"
-                await db.commit()
-                print(f"DEBUG: Subscription {subscription.id} deactivated due to quota exhaustion")
+        # Valid active sub
+        await db.refresh(sub, ["plan"])
+        remaining = sub.image_generation_limit - sub.quota_used
+        total_remaining += remaining
+        active_plans_count += 1
 
-            raise QuotaLimitExceeded(
-                detail=f"Subscription quota exceeded ({used}/{limit} images used). Please purchase a new plan."
-            )
-        return limit - used
+    await db.commit()
+
+    if active_plans_count > 0:
+        print(f"DEBUG: User has {active_plans_count} active plans. Total remaining quota: {total_remaining}")
+        return total_remaining
+
+    # If no active plans (or all expired/exhausted), fall back to Free Tier logic
 
     # 3. Authenticated User without Subscription (Free Tier fallback)
     print("DEBUG: No active subscription found. Falling back to free tier.")
@@ -133,16 +139,37 @@ async def increment_quota(
 
     else:
         # Authenticated
-        query = select(Subscription).where(
-            Subscription.user_id == user.id,
-            Subscription.status == "active",  # Only increment for active subscriptions
+        # Authenticated - Increment on oldest active subscription (FIFO)
+        query = (
+            select(Subscription)
+            .where(
+                Subscription.user_id == user.id,
+                Subscription.status == "active",
+            )
+            .order_by(Subscription.created_at.asc())
         )
-        result = await db.execute(query)
-        subscription = result.scalar_one_or_none()
 
-        if subscription:
-            subscription.quota_used += 1
-        else:
+        result = await db.execute(query)
+        subscriptions = result.scalars().all()
+
+        quota_incremented = False
+
+        for sub in subscriptions:
+            if sub.quota_used < sub.image_generation_limit:
+                sub.quota_used += 1
+                quota_incremented = True
+
+                # Check for exhaustion immediately
+                if sub.quota_used >= sub.image_generation_limit:
+                    sub.status = "quota_exhausted"
+                    print(f"DEBUG: Subscription {sub.id} exhausted after usage.")
+
+                print(
+                    f"DEBUG: Incremented quota for subscription {sub.id}. Used: {sub.quota_used}/{sub.image_generation_limit}"
+                )
+                break
+
+        if not quota_incremented:
             # Fallback to daily usage by User ID
             query = select(DailyUsage).where(DailyUsage.identifier == str(user.id), DailyUsage.date == today)
             result = await db.execute(query)
