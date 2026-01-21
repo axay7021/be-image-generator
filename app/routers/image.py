@@ -84,7 +84,7 @@ def detect_face_mediapipe(image_bytes):
 
 
 def process_gemini_image(input_image_bytes, prompt):
-    """Sends image and prompt to Gemini and returns modified image bytes and cost info."""
+    """Sends image and prompt to Gemini and returns (modified_image_bytes, cost_info, error_message)."""
     if not client:
         raise ValueError("GEMINI_API_KEY not set")
 
@@ -107,8 +107,8 @@ def process_gemini_image(input_image_bytes, prompt):
             COST_PER_1M_INPUT_TOKENS = 0.075
             COST_PER_1M_OUTPUT_TOKENS = 0.30
 
-            input_tokens = response.usage_metadata.prompt_token_count
-            output_tokens = response.usage_metadata.candidates_token_count
+            input_tokens = response.usage_metadata.prompt_token_count or 0
+            output_tokens = response.usage_metadata.candidates_token_count or 0
 
             input_cost_usd = (input_tokens / 1_000_000) * COST_PER_1M_INPUT_TOKENS
             output_cost_usd = (output_tokens / 1_000_000) * COST_PER_1M_OUTPUT_TOKENS
@@ -124,10 +124,19 @@ def process_gemini_image(input_image_bytes, prompt):
     if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
         for part in response.candidates[0].content.parts:
             if part.inline_data:
-                return part.inline_data.data, cost_info
+                return part.inline_data.data, cost_info, None
 
-    logger.error(f"No image found in response: {response}")
-    return None, cost_info
+    # Analyze failure reason
+    failure_detail = "Failed to process image"
+    if response.candidates:
+        candidate = response.candidates[0]
+        if candidate.finish_reason:
+            reason_str = f"{candidate.finish_reason}"
+            failure_detail += f" (Reason: {reason_str})"
+            logger.warning(f"Gemini Refusal: {failure_detail}")
+
+    logger.error(f"No image found in response. Full Response: {response}")
+    return None, cost_info, failure_detail
 
 
 @router.post("/validate-image")
@@ -502,7 +511,7 @@ async def modify_image(
             "If any such elements are detected in the source, they must be seamlessly removed."
         )
 
-        modified_image_data, cost_info = process_gemini_image(image_bytes, prompt)
+        modified_image_data, cost_info, error_msg = process_gemini_image(image_bytes, prompt)
 
         if modified_image_data:
             # Increment quota and Log usage
@@ -522,7 +531,7 @@ async def modify_image(
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to process image (no output from model)",
+            detail=error_msg or "Failed to process image (no output from model)",
         )
     except HTTPException:
         raise
