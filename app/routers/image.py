@@ -151,24 +151,47 @@ async def validate_image(file: UploadFile = File(...)):
 async def upscale_image(
     request: Request,
     file: UploadFile = File(...),
-    target_resolution: str = Form(..., description="Target resolution: '2K' or '4K'"),
+    target_resolution: str | None = Form(None, description="Target resolution: '2K' or '4K'"),
+    target_width: str | None = Form(None, description="Target width in pixels (e.g. '2560')"),
     db: Annotated[AsyncSession, Depends(get_db)] = None,
     user: Annotated[User | None, Depends(get_current_user_optional)] = None,
 ):
     try:
+        # 1. Resolve Resolution/Width Input
+        # Frontend may send 'target_width' (2560/3840) instead of 'target_resolution'
+        resolved_resolution = target_resolution
+
+        if not resolved_resolution and target_width:
+            if str(target_width) == "2560":
+                resolved_resolution = "2K"
+            elif str(target_width) == "3840":
+                resolved_resolution = "4K"
+            elif str(target_width).lower() == "original":
+                resolved_resolution = "Original"
+            else:
+                # Fallback for custom widths if we ever support them, or treat as error
+                pass
+
+        if not resolved_resolution:
+            # If neither is provided (or successfully mapped)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Missing 'target_resolution' or valid 'target_width'.",
+            )
+
         # 2. Resolution & Cost Logic
-        target_width = 0
+        target_width_val = 0
         cost = 0
         is_original = False
 
-        if target_resolution == "Original":
+        if resolved_resolution == "Original":
             cost = 0
             is_original = True
-        elif target_resolution == "2K":
-            target_width = 2560
+        elif resolved_resolution == "2K":
+            target_width_val = 2560
             cost = 2
-        elif target_resolution == "4K":
-            target_width = 3840
+        elif resolved_resolution == "4K":
+            target_width_val = 3840
             cost = 4
         else:
             raise HTTPException(
@@ -199,10 +222,10 @@ async def upscale_image(
             # Calculate height to maintain aspect ratio
             original_height, original_width = img.shape[:2]
             aspect_ratio = original_height / original_width
-            target_height = int(target_width * aspect_ratio)
+            target_height = int(target_width_val * aspect_ratio)
 
             # High Quality Upscaling (Lanczos)
-            upscaled_img = cv2.resize(img, (target_width, target_height), interpolation=cv2.INTER_LANCZOS4)
+            upscaled_img = cv2.resize(img, (target_width_val, target_height), interpolation=cv2.INTER_LANCZOS4)
 
             # Apply Sharpening
             gaussian = cv2.GaussianBlur(upscaled_img, (0, 0), 2.0)
