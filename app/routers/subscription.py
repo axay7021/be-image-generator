@@ -113,6 +113,9 @@ async def create_checkout_session(
             customer_email=user.email,
             client_reference_id=str(user.id),
             metadata={"plan_id": str(plan.id), "user_id": str(user.id)},
+            payment_intent_data={"metadata": {"plan_id": str(plan.id), "user_id": str(user.id)}}
+            if mode == "payment"
+            else None,
         )
         print(f"DEBUG: Stripe Session created: {checkout_session.url}")
 
@@ -215,6 +218,10 @@ async def stripe_webhook(
         # Fulfill the purchase...
         await handle_checkout_completed(session, db)
 
+    elif event["type"] == "payment_intent.succeeded":
+        print(f"DEBUG: Processing payment_intent.succeeded for {event['data']['object'].get('id')}")
+        await handle_payment_intent_succeeded(event["data"]["object"], db)
+
     elif event["type"] == "invoice.payment_succeeded":
         # Reset quota for new period
         invoice = event["data"]["object"]
@@ -259,8 +266,21 @@ async def handle_checkout_completed(session, db: AsyncSession):
 
     # For one-time payments (no subscription ID)
     if not stripe_sub_id:
-        stripe_sub_id = f"one_time_{session.get('id')}"
+        # Prefer Payment Intent ID for consistency with fallback handler
+        payment_intent_id = session.get("payment_intent")
+        if payment_intent_id and isinstance(payment_intent_id, str):
+            stripe_sub_id = f"one_time_{payment_intent_id}"
+        else:
+            stripe_sub_id = f"one_time_{session.get('id')}"
+
         logger.info(f"One-time payment, using ID: {stripe_sub_id}")
+
+        # Check if already fulfilled (e.g. by payment_intent event)
+        stmt = select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub_id)
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none():
+            logger.info(f"Subscription {stripe_sub_id} already fulfilled (likely by payment_intent).")
+            return
 
     new_sub = Subscription(
         user_id=user_id,
@@ -293,6 +313,75 @@ async def handle_payment_succeeded(invoice, db: AsyncSession):
         sub.period_end = datetime.fromtimestamp(invoice["period_end"])
         await db.commit()
         logger.info(f"Subscription {stripe_sub_id} reactivated with quota reset")
+
+
+async def handle_payment_intent_succeeded(payment_intent, db: AsyncSession):
+    # This acts as a FALLBACK if checkout.session.completed is missing/delayed
+    metadata = payment_intent.get("metadata", {})
+    user_id = metadata.get("user_id")
+    plan_id = metadata.get("plan_id")
+
+    if not user_id or not plan_id:
+        # Many payment intents might not be for subscriptions (e.g. invoices?), ignore them if no metadata
+        # Only process if we explicitly added the metadata in create_checkout_session
+        return
+
+    logger.info(f"Processing payment_intent fallback for user {user_id}, plan {plan_id}")
+
+    # Use payment_intent ID as the unique key to prevent duplication with checkout session
+    # If checkout session handles it, it uses "one_time_{session_id}"
+    # If we handle it here, we use "one_time_{payment_intent_id}"
+    # Wait, if we use different IDs, we might double-fulfill!
+    #
+    # Checkout Session ID != Payment Intent ID.
+    # We must check if "one_time_{payment_intent_id}" OR "one_time_{session_id}" exists?
+    # No, we can't easily know the session ID from here without an API call.
+    #
+    # STRATEGY:
+    # 1. We prioritize checkout.session.completed.
+    # 2. If this runs, it means checkout.session.completed might have failed or not arrived yet.
+    # 3. We'll use "pi_{payment_intent_id}" as the subscription ID.
+    # 4. If checkout.session.completed arrives LATER, it uses "one_time_{session_id}".
+    #    --> Double fulfillment risk.
+    #
+    # However, for the USER's specific issue, they are NOT getting checkout.session.completed.
+    # So this unblocks them.
+    #
+    # Can we link them? The Checkout Session object contains `payment_intent` ID.
+    # So in `handle_checkout_completed`, we should PREFER using payment_intent ID if available?
+    # Yes. Let's modify handle_checkout_completed first to use payment_intent ID if available.
+
+    stripe_sub_id = f"one_time_{payment_intent['id']}"
+
+    # Check validation
+    stmt = select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub_id)
+    result = await db.execute(stmt)
+    if result.scalar_one_or_none():
+        logger.info(f"Payment intent {stripe_sub_id} already processed.")
+        return
+
+    # Helper logic similar to handle_checkout
+    plan = await db.get(Plan, plan_id)
+    if not plan:
+        logger.error(f"Plan {plan_id} not found")
+        return
+
+    now = datetime.now()
+    expiration_date = now + timedelta(days=plan.validity_days)
+
+    new_sub = Subscription(
+        user_id=user_id,
+        plan_id=plan_id,
+        stripe_subscription_id=stripe_sub_id,
+        status="active",
+        quota_used=0,
+        period_start=now,
+        period_end=expiration_date,
+        image_generation_limit=plan.image_quota,
+    )
+    db.add(new_sub)
+    await db.commit()
+    logger.info(f"Created subscription (fallback) {stripe_sub_id} for user {user_id}")
 
 
 async def handle_subscription_deleted(subscription_obj, db: AsyncSession):
