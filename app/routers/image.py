@@ -278,6 +278,21 @@ async def modify_image(
     quota_remaining: int = Depends(check_quota),  # Check quota first
 ):
     try:
+        # Validate Input Lengths
+        def validate_length(name, value):
+            if value and len(str(value)) > settings.MAX_TEXT_INPUT_LENGTH:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Input '{name}' exceeds maximum length of {settings.MAX_TEXT_INPUT_LENGTH} characters.",
+                )
+
+        validate_length("extra_context", extra_context)
+        validate_length("passport_mode", passport_mode)
+        validate_length("suit_color", suit_color)
+        validate_length("tie_color", tie_color)
+        validate_length("style", style)
+        validate_length("category", category)
+
         image_bytes = await file.read()
 
         # Local Face Detection
@@ -382,7 +397,46 @@ async def modify_image(
                     prompt += f" Additional requirements: {extra_context}"
 
         elif action == "change-bg":
-            prompt = f"Extract the main subject from this image with high-precision edge detection. Place the subject into a new background: {extra_context}. Adjust the subject's lighting, shadows, and color temperature to perfectly match the new environment so the integration looks photorealistic and seamless. Do not alter the subject's appearance."
+            bg_style_configs = {
+                "white": "pure plain white background (RGB 255, 255, 255), no shadows, no gradients",
+                "black": "pure solid black background",
+                "grey": "solid neutral grey background",
+                "warm_grey": "solid warm grey background",
+                "cool_grey": "solid cool grey background",
+                "blue": "solid deep corporate blue background, matte finish",
+                "gradient_blue": "professional radial gradient background, dark blue to lighter blue",
+                "gradient_grey": "professional radial gradient background, dark grey to lighter grey",
+                "office": "blurred modern office background, professional corporate setting",
+                "plain": "solid flat color background",
+                "studio": "professional dark grey studio background with rim lighting",
+            }
+
+            # Resolve background request
+            bg_input = category or style 
+            bg_description = "pure plain white background"  # Default fallback
+
+            if bg_input:
+                normalized_bg = bg_input.lower().replace(" ", "_").replace("-", "_")
+
+                if normalized_bg in bg_style_configs:
+                    bg_description = bg_style_configs[normalized_bg]
+                elif (normalized_bg == "custom" or normalized_bg not in bg_style_configs) and extra_context:
+                    # Fallback to extra_context if category is custom/unknown but context is provided
+                    bg_description = extra_context
+            elif extra_context:
+                # No category specified, but context provided
+                bg_description = extra_context
+
+            # Log resolved description
+            logger.info(f"DEBUG: Resolved Background Description: '{bg_description}' from input '{bg_input}'")
+
+            prompt = (
+                f"Extract the main subject from this image with high-precision edge detection. "
+                f"Replace the ENTIRE background with: {bg_description}. "
+                f"CRITICAL: The background must be exactly '{bg_description}'. "
+                f"Adjust the subject's lighting, shadows, and color temperature to perfectly match the new environment "
+                f"so the integration looks photorealistic and seamless. Do not alter the subject's appearance."
+            )
         elif action == "remove-object":
             prompt = f"Identify and completely remove the {extra_context} from this image. Reconstruct the missing area by realistically extending the surrounding textures, patterns, and lighting. The final result must show no traces of the original object and should look like a clean, untouched photograph."
         elif action == "custom-edit":

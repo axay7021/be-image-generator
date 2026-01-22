@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_DEFAULT: str = "10/minute"
     MCP_SERVER_URL: str = "http://localhost:8001/tools/mcp"
     FRONTEND_URL: str = "http://localhost:3000"
+    MAX_TEXT_INPUT_LENGTH: int = 500
 
     # Database
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost/postgres"
