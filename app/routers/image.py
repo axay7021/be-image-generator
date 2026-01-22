@@ -278,20 +278,20 @@ async def modify_image(
     quota_remaining: int = Depends(check_quota),  # Check quota first
 ):
     try:
-        # Validate Input Lengths
-        def validate_length(name, value):
-            if value and len(str(value)) > settings.MAX_TEXT_INPUT_LENGTH:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Input '{name}' exceeds maximum length of {settings.MAX_TEXT_INPUT_LENGTH} characters.",
-                )
+        # # Validate Input Lengths
+        # def validate_length(name, value):
+        #     if value and len(str(value)) > settings.MAX_TEXT_INPUT_LENGTH:
+        #         raise HTTPException(
+        #             status_code=status.HTTP_400_BAD_REQUEST,
+        #             detail=f"Input '{name}' exceeds maximum length of {settings.MAX_TEXT_INPUT_LENGTH} characters.",
+        #         )
 
-        validate_length("extra_context", extra_context)
-        validate_length("passport_mode", passport_mode)
-        validate_length("suit_color", suit_color)
-        validate_length("tie_color", tie_color)
-        validate_length("style", style)
-        validate_length("category", category)
+        # validate_length("extra_context", extra_context)
+        # validate_length("passport_mode", passport_mode)
+        # validate_length("suit_color", suit_color)
+        # validate_length("tie_color", tie_color)
+        # validate_length("style", style)
+        # validate_length("category", category)
 
         image_bytes = await file.read()
 
@@ -412,7 +412,7 @@ async def modify_image(
             }
 
             # Resolve background request
-            bg_input = category or style 
+            bg_input = category or style
             bg_description = "pure plain white background"  # Default fallback
 
             if bg_input:
@@ -562,6 +562,8 @@ async def modify_image(
         prompt += (
             " FINAL STYLIZATION RULE: The output image must be completely clean and strictly photorealistic. "
             "ABSOLUTELY NO watermarks, logos, text overlays, brand identifiers, icons, or graphic elements of any kind. "
+            "SPECIFICALLY: Do NOT include any 'Gemini' logo, Google branding, or AI generation watermarks. "
+            "The image must appear exactly like a photo taken with a camera, with zero digital artifacts or signatures. "
             "If any such elements are detected in the source, they must be seamlessly removed."
         )
 
