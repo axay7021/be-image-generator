@@ -406,7 +406,7 @@ async def modify_image(
                 "blue": "solid deep corporate blue background (Hex #2d4d74), matte finish",
                 "gradient_blue": "professional radial gradient background, dark blue to lighter blue (linear-gradient #00c6ff to #0072ff)",
                 "gradient_grey": "professional radial gradient background, dark grey to lighter grey (linear-gradient #bdc3c7 to #2c3e50)",
-                "office": "blurred modern office background, professional corporate setting",
+                # "office": "blurred modern office background, professional corporate setting",
                 "plain": "solid flat color background (Hex #E0E0E0)",
                 "studio": "professional dark grey studio background (Hex #333333) with rim lighting",
             }
