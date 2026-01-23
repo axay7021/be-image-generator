@@ -106,11 +106,19 @@ async def check_quota(
     # 3. Authenticated User without Subscription (Free Tier fallback)
     print("DEBUG: No active subscription found. Falling back to free tier.")
     # Check daily usage for user_id
-    query = select(DailyUsage).where(DailyUsage.identifier == str(user.id), DailyUsage.date == today)
-    result = await db.execute(query)
-    daily_usage = result.scalar_one_or_none()
+    query_user = select(DailyUsage).where(DailyUsage.identifier == str(user.id), DailyUsage.date == today)
+    result_user = await db.execute(query_user)
+    daily_usage_user = result_user.scalar_one_or_none()
+    usage_user = daily_usage_user.usage_count if daily_usage_user else 0
 
-    usage_count = daily_usage.usage_count if daily_usage else 0
+    # Check daily usage for IP (to prevent anonymous -> logged-in loophole)
+    client_ip = request.client.host if request.client else "unknown"
+    query_ip = select(DailyUsage).where(DailyUsage.identifier == client_ip, DailyUsage.date == today)
+    result_ip = await db.execute(query_ip)
+    daily_usage_ip = result_ip.scalar_one_or_none()
+    usage_ip = daily_usage_ip.usage_count if daily_usage_ip else 0
+
+    usage_count = usage_user + usage_ip
     limit = 1
 
     print(f"DEBUG: Free tier usage: {usage_count}/{limit}")
@@ -188,7 +196,7 @@ async def increment_quota(
                     break
 
         if not quota_incremented or remaining_cost > 0:
-            # Fallback to daily usage by User ID
+            # Fallback to daily usage by User ID (only if paid quota wasn't enough)
             query = select(DailyUsage).where(DailyUsage.identifier == str(user.id), DailyUsage.date == today)
             result = await db.execute(query)
             daily_usage = result.scalar_one_or_none()
