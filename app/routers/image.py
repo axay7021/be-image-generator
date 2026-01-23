@@ -398,17 +398,17 @@ async def modify_image(
 
         elif action == "change-bg":
             bg_style_configs = {
-                "white": "pure plain white background (RGB 255, 255, 255), no shadows, no gradients",
-                "black": "pure solid black background",
-                "grey": "solid neutral grey background",
-                "warm_grey": "solid warm grey background",
-                "cool_grey": "solid cool grey background",
-                "blue": "solid deep corporate blue background, matte finish",
-                "gradient_blue": "professional radial gradient background, dark blue to lighter blue",
-                "gradient_grey": "professional radial gradient background, dark grey to lighter grey",
+                "white": "pure plain white background (Hex #FFFFFF), no shadows, no gradients",
+                "black": "pure solid black background (Hex #000000)",
+                "grey": "solid neutral grey background (Hex #808080)",
+                "warm_grey": "solid warm grey background (Hex #A9A9A9)",
+                "cool_grey": "solid cool grey background (Hex #708090)",
+                "blue": "solid deep corporate blue background (Hex #2d4d74), matte finish",
+                "gradient_blue": "professional radial gradient background, dark blue to lighter blue (linear-gradient #00c6ff to #0072ff)",
+                "gradient_grey": "professional radial gradient background, dark grey to lighter grey (linear-gradient #bdc3c7 to #2c3e50)",
                 "office": "blurred modern office background, professional corporate setting",
-                "plain": "solid flat color background",
-                "studio": "professional dark grey studio background with rim lighting",
+                "plain": "solid flat color background (Hex #E0E0E0)",
+                "studio": "professional dark grey studio background (Hex #333333) with rim lighting",
             }
 
             # Resolve background request
