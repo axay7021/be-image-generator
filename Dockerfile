@@ -10,6 +10,13 @@ ENV UV_LINK_MODE=copy
 # Install dependencies
 # Copying valid pyproject.toml and uv.lock is required
 COPY pyproject.toml uv.lock ./
+
+# Install system dependencies required for OpenCV/Mediapipe
+RUN apt-get update && apt-get install -y \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN uv sync --frozen --no-install-project --no-dev
 # Copy the project into the image
 COPY . .
