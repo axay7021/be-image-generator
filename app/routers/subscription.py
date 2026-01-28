@@ -122,8 +122,6 @@ async def create_checkout_session(
         return success_response(data={"url": checkout_session.url}, message="Checkout session created")
 
     except Exception as e:
-        from app.core.logger import logger
-
         logger.error(f"Checkout session creation failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e)) from e
 

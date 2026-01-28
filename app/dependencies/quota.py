@@ -36,6 +36,7 @@ async def check_quota(
     #     return 999999
 
     today = date.today()
+    print(f"DEBUG Headers: {request.headers}")
     client_ip = get_client_ip(request)
 
     # 1. Anonymous User
@@ -121,8 +122,6 @@ async def check_quota(
     usage_user = daily_usage_user.usage_count if daily_usage_user else 0
 
     # Check daily usage for IP (to prevent anonymous -> logged-in loophole)
-    # limit check to ensure we don't double count if IP is utilized by multiple users (NAT issue)
-    # For now, we keep it but warn if it blocks many users.
     client_ip = get_client_ip(request)
     query_ip = select(DailyUsage).where(DailyUsage.identifier == client_ip, DailyUsage.date == today)
     result_ip = await db.execute(query_ip)
