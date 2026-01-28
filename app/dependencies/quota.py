@@ -12,6 +12,14 @@ from app.dependencies.user_auth import get_current_user_optional
 from app.exceptions.quota_exception import QuotaLimitExceeded
 
 
+def get_client_ip(request: Request) -> str:
+    """Helper to get the real client IP, considering proxies"""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 async def check_quota(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -22,12 +30,13 @@ async def check_quota(
     Check if the user (or anonymous IP) has sufficient quota.
     Returns the remaining quota count or raises 429.
     """
-    # Bypass quota check in development environment
-    if settings.ENVIRONMENT == "development":
-        print("DEBUG: Dev mode, quota bypassed.")
-        return 999999  # Return a high number to indicate unlimited quota
+    # Bypass quota check in development environment - OPTIONAL: Toggle off if testing quota
+    # if settings.ENVIRONMENT == "development":
+    #     print("DEBUG: Dev mode, quota bypassed.")
+    #     return 999999
 
     today = date.today()
+    client_ip = get_client_ip(request)
 
     # 1. Anonymous User
     if not user:
@@ -35,8 +44,8 @@ async def check_quota(
             raise QuotaLimitExceeded(
                 detail="High-resolution features require an active subscription. Please sign in or subscribe."
             )
-        print("DEBUG: Anonymous user check.")
-        client_ip = request.client.host if request.client else "unknown"
+        print(f"DEBUG: Anonymous user check for IP {client_ip}.")
+
         # Check daily usage
         query = select(DailyUsage).where(DailyUsage.identifier == client_ip, DailyUsage.date == today)
         result = await db.execute(query)
@@ -112,7 +121,9 @@ async def check_quota(
     usage_user = daily_usage_user.usage_count if daily_usage_user else 0
 
     # Check daily usage for IP (to prevent anonymous -> logged-in loophole)
-    client_ip = request.client.host if request.client else "unknown"
+    # limit check to ensure we don't double count if IP is utilized by multiple users (NAT issue)
+    # For now, we keep it but warn if it blocks many users.
+    client_ip = get_client_ip(request)
     query_ip = select(DailyUsage).where(DailyUsage.identifier == client_ip, DailyUsage.date == today)
     result_ip = await db.execute(query_ip)
     daily_usage_ip = result_ip.scalar_one_or_none()
@@ -121,7 +132,7 @@ async def check_quota(
     usage_count = usage_user + usage_ip
     limit = 1
 
-    print(f"DEBUG: Free tier usage: {usage_count}/{limit}")
+    print(f"DEBUG: Free tier usage: {usage_count}/{limit} (User: {usage_user}, IP: {usage_ip})")
 
     if usage_count >= limit:
         raise QuotaLimitExceeded(
@@ -141,10 +152,10 @@ async def increment_quota(
     Increment usage counter after successful generation.
     """
     today = date.today()
+    client_ip = get_client_ip(request)
 
     if not user:
         # Anonymous: Increment DailyUsage by IP
-        client_ip = request.client.host if request.client else "unknown"
         query = select(DailyUsage).where(DailyUsage.identifier == client_ip, DailyUsage.date == today)
         result = await db.execute(query)
         daily_usage = result.scalar_one_or_none()
