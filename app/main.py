@@ -7,6 +7,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.agents import mcp
 from app.core.logger import logger, request_logger
@@ -60,6 +61,9 @@ app.state.limiter = limiter
 
 
 # Register Middleware
+# Trust proxy headers (X-Forwarded-For, etc.) - Critical for running behind Caddy/Nginx
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

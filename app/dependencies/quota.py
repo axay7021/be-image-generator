@@ -36,7 +36,6 @@ async def check_quota(
     #     return 999999
 
     today = date.today()
-    print(f"DEBUG Headers: {request.headers}")
     client_ip = get_client_ip(request)
 
     # 1. Anonymous User
