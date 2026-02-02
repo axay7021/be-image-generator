@@ -28,4 +28,3 @@ jobs:
           pip install --upgrade pip
           pip install .
           pm2 restart image-generator-dev
-

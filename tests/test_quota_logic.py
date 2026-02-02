@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+
+from app.db.schema import Subscription, User
 from app.dependencies.quota import check_quota
-from app.db.schema import Subscription, Plan, User
 
 
 @pytest.mark.asyncio

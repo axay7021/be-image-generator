@@ -40,6 +40,7 @@ async def get_current_user(
     except HTTPException as e:
         # Log the authentication failure
         from app.core.logger import logger
+
         logger.warning(f"Authentication failed in get_current_user: {e.detail}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

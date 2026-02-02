@@ -30,9 +30,7 @@ async def seed_super_admin():
                 )
                 session.add(super_admin)
                 await session.commit()
-                logger.info(
-                    f"Super admin created successfully with email: {settings.SUPER_ADMIN_EMAIL}"
-                )
+                logger.info(f"Super admin created successfully with email: {settings.SUPER_ADMIN_EMAIL}")
         except Exception as e:
             logger.error(f"Error seeding super admin: {e}")
             await session.rollback()

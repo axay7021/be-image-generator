@@ -1,10 +1,12 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.db.schema import User
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.settings import settings
-from unittest.mock import MagicMock, patch
+from app.db.schema import User
 
 
 # Mock Svix

@@ -37,16 +37,13 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     and formats them with the standardized response structure.
     """
     logger.warning(
-        f"HTTP exception: {exc.status_code} - {exc.detail} | "
-        f"Path: {request.url.path} | Method: {request.method}"
+        f"HTTP exception: {exc.status_code} - {exc.detail} | " f"Path: {request.url.path} | Method: {request.method}"
     )
 
     return error_response(status_code=exc.status_code, message=str(exc.detail))
 
 
-async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """
     Handle Pydantic validation errors with standardized format
 

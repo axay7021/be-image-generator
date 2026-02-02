@@ -104,12 +104,12 @@ Best regards,
         .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
         .header {{ background-color: #4CAF50; color: white; padding: 20px; text-align: center; }}
         .content {{ padding: 20px; background-color: #f9f9f9; }}
-        .otp-code {{ 
-            font-size: 32px; 
-            font-weight: bold; 
-            text-align: center; 
-            padding: 20px; 
-            background-color: #fff; 
+        .otp-code {{
+            font-size: 32px;
+            font-weight: bold;
+            text-align: center;
+            padding: 20px;
+            background-color: #fff;
             border: 2px dashed #4CAF50;
             letter-spacing: 8px;
             margin: 20px 0;
@@ -172,10 +172,10 @@ Best regards,
         .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
         .header {{ background-color: #2196F3; color: white; padding: 20px; text-align: center; }}
         .content {{ padding: 20px; background-color: #f9f9f9; }}
-        .alert {{ 
-            background-color: #fff3cd; 
-            border-left: 4px solid #ffc107; 
-            padding: 15px; 
+        .alert {{
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
             margin: 20px 0;
         }}
         .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #777; }}

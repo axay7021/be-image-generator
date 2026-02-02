@@ -5,7 +5,6 @@ from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.settings import settings
 from app.db import get_db
 from app.db.schema import DailyUsage, Subscription, User
 from app.dependencies.user_auth import get_current_user_optional

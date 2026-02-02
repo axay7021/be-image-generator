@@ -2,11 +2,11 @@ from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.db.schema import User, Subscription, DailyUsage
+from app.db.schema import DailyUsage, Subscription, User
 from app.dependencies.auth import get_current_active_admin
 from app.utils.response import success_response
 

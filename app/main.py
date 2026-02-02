@@ -1,15 +1,13 @@
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.routing import Mount
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from app.agents import mcp
 from app.core.logger import logger, request_logger
 from app.core.settings import settings
 from app.exceptions import (
@@ -34,11 +32,9 @@ async def lifespan(app: FastAPI):
 
     # Start background scheduler for cleanup tasks
 
-    async with AsyncExitStack() as stack:
-        await stack.enter_async_context(mcp.session_manager.run())
-
-        start_scheduler()
-        yield
+    # Start background scheduler for cleanup tasks
+    start_scheduler()
+    yield
 
     # Shutdown
     stop_scheduler()
@@ -52,7 +48,6 @@ app: FastAPI = FastAPI(
     redoc_url="/redoc" if settings.DEBUG else None,
     openapi_url="/openapi.json" if settings.DEBUG else None,
     lifespan=lifespan,
-    routes=[Mount("/tools", mcp.streamable_http_app())],
 )
 
 

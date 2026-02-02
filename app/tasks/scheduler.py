@@ -32,7 +32,7 @@ def start_scheduler():
         name="Cleanup expired access tokens",
         replace_existing=True,
     )
-    
+
     # Schedule subscription expiration check to run daily at 2 AM
     scheduler.add_job(
         expire_old_subscriptions,

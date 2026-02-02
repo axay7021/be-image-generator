@@ -35,9 +35,7 @@ def get_file_handler(
     filename: Path, level: int = logging.INFO, backup_count: int = BACKUP_COUNT
 ) -> RotatingFileHandler:
     """Returns a configured rotating file handler."""
-    file_handler = RotatingFileHandler(
-        filename, maxBytes=MAX_BYTES, backupCount=backup_count, encoding=ENCODING
-    )
+    file_handler = RotatingFileHandler(filename, maxBytes=MAX_BYTES, backupCount=backup_count, encoding=ENCODING)
     file_handler.setLevel(level)
     file_handler.setFormatter(formatter)
     return file_handler

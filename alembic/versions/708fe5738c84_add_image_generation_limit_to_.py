@@ -6,11 +6,12 @@ Create Date: 2026-01-20 09:39:29.703663
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "708fe5738c84"
@@ -26,12 +27,14 @@ def upgrade() -> None:
     op.add_column("subscriptions", sa.Column("image_generation_limit", sa.Integer(), nullable=True))
 
     # Backfill data from plans
-    op.execute("""
+    op.execute(
+        """
         UPDATE subscriptions
         SET image_generation_limit = plans.image_quota
         FROM plans
         WHERE subscriptions.plan_id = plans.id
-    """)
+    """
+    )
 
     # Make nullable=False
     op.alter_column("subscriptions", "image_generation_limit", nullable=False)

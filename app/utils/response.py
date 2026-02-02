@@ -75,9 +75,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 
 # Helper functions for creating responses
-def success_response(
-    data: Any = None, message: str = "Operation successful", status_code: int = 200
-) -> dict[str, Any]:
+def success_response(data: Any = None, message: str = "Operation successful", status_code: int = 200) -> dict[str, Any]:
     """
     Create a successful API response
 
@@ -92,9 +90,7 @@ def success_response(
     return {"statusCode": status_code, "success": True, "message": message, "data": data}
 
 
-def error_response(
-    message: str = "Operation failed", status_code: int = 400, data: Any = None
-) -> dict[str, Any]:
+def error_response(message: str = "Operation failed", status_code: int = 400, data: Any = None) -> dict[str, Any]:
     """
     Create an error API response
 
