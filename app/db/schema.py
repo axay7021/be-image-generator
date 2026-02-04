@@ -342,6 +342,8 @@ class Plan(Base):
     price_usd: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     image_quota: Mapped[int] = mapped_column(Integer, nullable=False)
     stripe_price_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    razorpay_plan_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    razorpay_payment_page_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     billing_interval: Mapped[str | None] = mapped_column(
         String(20), nullable=True
     )  # e.g., "month", "year", None for one-time
@@ -367,7 +369,9 @@ class Subscription(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     plan_id: Mapped[str] = mapped_column(String(36), ForeignKey("plans.id"), nullable=False)
-    stripe_subscription_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    razorpay_subscription_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    payment_provider: Mapped[str] = mapped_column(String(50), nullable=False, default="stripe")  # stripe, razorpay
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default="active", index=True
     )  # active, quota_exhausted, expired, canceled

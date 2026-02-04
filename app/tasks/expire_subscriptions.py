@@ -33,7 +33,7 @@ async def expire_old_subscriptions():
             for sub in expired_subs:
                 sub.status = "expired"
                 count += 1
-                logger.info(f"Expired subscription {sub.id} for user {sub.user_id} " f"(expired on {sub.period_end})")
+                logger.info(f"Expired subscription {sub.id} for user {sub.user_id} (expired on {sub.period_end})")
 
             if count > 0:
                 await db.commit()

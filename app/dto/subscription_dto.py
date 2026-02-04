@@ -8,6 +8,9 @@ class PlanBase(BaseModel):
     price_usd: float = Field(..., description="Price in USD")
     image_quota: int = Field(..., description="Number of images allowed")
     stripe_price_id: str = Field(..., description="Stripe Price ID")
+    razorpay_plan_id: str | None = Field(default=None, description="Razorpay Plan ID (optional)")
+    razorpay_payment_page_id: str | None = Field(default=None, description="Razorpay Payment Page ID (optional)")
+    billing_interval: str | None = Field(default=None, description="Billing interval (month/year) or None for one-time")
     validity_days: int = Field(default=30, description="Plan validity in days (e.g., 30, 180)")
     is_popular: bool = Field(default=False, description="Whether this is a popular plan")
 

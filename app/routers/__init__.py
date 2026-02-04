@@ -5,6 +5,7 @@ from app.routers import (
     admin_auth,
     example,
     image,
+    razorpay,
     subscription,
     user_auth,
     webhook,
@@ -13,6 +14,7 @@ from app.routers import (
 router = APIRouter(prefix="/api/v1")
 
 router.include_router(webhook.router)
+router.include_router(razorpay.router)
 
 router.include_router(admin_auth.router)
 router.include_router(user_auth.router)

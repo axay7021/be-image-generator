@@ -50,6 +50,9 @@ async def create_plan(
         price_usd=data.price_usd,
         image_quota=data.image_quota,
         stripe_price_id=data.stripe_price_id,
+        razorpay_plan_id=data.razorpay_plan_id,
+        razorpay_payment_page_id=data.razorpay_payment_page_id,
+        billing_interval=data.billing_interval,
         validity_days=data.validity_days,
     )
     db.add(new_plan)
