@@ -36,3 +36,8 @@ async def get_db() -> AsyncGenerator[AsyncSession]:
         except:
             await session.rollback()
             raise
+
+
+def get_async_db_context():
+    """Get database session context manager for background tasks."""
+    return SessionLocal()

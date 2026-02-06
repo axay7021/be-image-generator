@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
 
     # Start background scheduler for cleanup tasks
     start_scheduler()
+
     yield
 
     # Shutdown

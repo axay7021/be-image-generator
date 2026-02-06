@@ -78,6 +78,25 @@ class OTPPurpose(str, PyEnum):
     EMAIL_VERIFICATION = "email_verification"
 
 
+class PaymentStatus(str, PyEnum):
+    PENDING = "pending"
+    CAPTURED = "captured"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+
+
+class ReconciliationStatus(str, PyEnum):
+    MATCHED = "matched"
+    UNMATCHED = "unmatched"
+    PENDING = "pending"
+    MANUAL = "manual"
+
+
+class PaymentProvider(str, PyEnum):
+    STRIPE = "stripe"
+    RAZORPAY = "razorpay"
+
+
 # ============================================
 # Models
 # ============================================
@@ -90,7 +109,10 @@ class Admin(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Nullable for Clerk admins
+    clerk_id: Mapped[str | None] = mapped_column(
+        String(255), unique=True, nullable=True, index=True
+    )  # Clerk integration
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[AdminRole] = mapped_column(Enum(AdminRole), nullable=False, default=AdminRole.STAFF)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -352,6 +374,7 @@ class Plan(Base):
     )  # Plan validity period (e.g., 30, 180 days)
     is_popular: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -377,10 +400,12 @@ class Subscription(Base):
     )  # active, quota_exhausted, expired, canceled
     image_generation_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     quota_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)  # Expiration date
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)  # Expiration date
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -388,6 +413,7 @@ class Subscription(Base):
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="subscriptions")
     plan: Mapped["Plan"] = relationship("Plan", back_populates="subscriptions")
+    transactions: Mapped[list["Transaction"]] = relationship("Transaction", back_populates="subscription")
 
 
 class DailyUsage(Base):
@@ -422,7 +448,74 @@ class ImageLog(Base):
     user: Mapped[Optional["User"]] = relationship("User", back_populates="image_logs")
 
 
+class Transaction(Base):
+    """Payment transaction records for detailed payment tracking"""
+
+    __tablename__ = "transactions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    plan_id: Mapped[str] = mapped_column(String(36), ForeignKey("plans.id"), nullable=False, index=True)
+    subscription_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("subscriptions.id"), nullable=True, index=True
+    )
+    payment_provider_id: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, index=True
+    )  # External payment ID
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default="INR")
+    payment_provider: Mapped[PaymentProvider] = mapped_column(
+        Enum(PaymentProvider, values_callable=lambda x: [e.value for e in x]), nullable=False, index=True
+    )
+    payment_method: Mapped[str | None] = mapped_column(String(50), nullable=True)  # card, upi, netbanking, etc.
+    payment_status: Mapped[PaymentStatus] = mapped_column(
+        Enum(PaymentStatus, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        default=PaymentStatus.PENDING,
+        index=True,
+    )
+    reconciliation_status: Mapped[ReconciliationStatus] = mapped_column(
+        Enum(ReconciliationStatus, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        default=ReconciliationStatus.MATCHED,
+        index=True,
+    )
+    payment_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Store additional payment details
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="transactions")
+    plan: Mapped["Plan"] = relationship("Plan", back_populates="transactions")
+    subscription: Mapped[Optional["Subscription"]] = relationship("Subscription", back_populates="transactions")
+
+
+class DailyAnalytics(Base):
+    """Pre-computed daily analytics for dashboard performance"""
+
+    __tablename__ = "daily_analytics"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True, nullable=False)
+    total_revenue: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    new_users: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    new_subscriptions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    active_subscriptions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_quota_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    razorpay_revenue: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    stripe_revenue: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    failed_transactions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 # Update User model to include relationships
 User.subscriptions = relationship("Subscription", back_populates="user")
 User.user_session = relationship("UserSession", back_populates="user")
 User.image_logs = relationship("ImageLog", back_populates="user")
+User.transactions = relationship("Transaction", back_populates="user")
+
+# Update Plan model to include transaction relationship
+Plan.transactions = relationship("Transaction", back_populates="plan")

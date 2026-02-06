@@ -499,3 +499,91 @@ async def revoke_all_sessions(admin_id: str, current_ip: str, db: AsyncSession) 
 
     await db.commit()
     return len(sessions)
+
+
+async def sync_clerk_admin(
+    clerk_id: str,
+    email: str,
+    full_name: str,
+    db: AsyncSession,
+    avatar_url: str | None = None,
+    performed_by_type: str = "ai_agent",
+    performed_by_id: str | None = None,
+) -> Admin:
+    """
+    Create or update admin from Clerk webhook payload.
+
+    Args:
+        clerk_id: Clerk user ID
+        email: Admin email
+        full_name: Admin full name
+        db: Database session
+        avatar_url: Optional avatar URL from Clerk
+        performed_by_type: Type of entity performing the sync
+        performed_by_id: ID of entity performing the sync
+
+    Returns:
+        Admin object (created or updated)
+    """
+    from uuid import uuid4
+
+    from app.db.schema import ActivityAction, ActivityLog, AdminRole, PerformedByType
+
+    # Check if admin already exists by clerk_id
+    result = await db.execute(select(Admin).where(Admin.clerk_id == clerk_id))
+    admin = result.scalar_one_or_none()
+
+    if admin:
+        # Update existing admin
+        changes = {}
+        if admin.email != email:
+            changes["email"] = {"old": admin.email, "new": email}
+            admin.email = email
+        if admin.full_name != full_name:
+            changes["full_name"] = {"old": admin.full_name, "new": full_name}
+            admin.full_name = full_name
+
+        if changes:
+            # Log update activity
+            activity_log = ActivityLog(
+                id=str(uuid4()),
+                entity_type="admin",
+                entity_id=admin.id,
+                action=ActivityAction.UPDATE,
+                performed_by_type=PerformedByType(performed_by_type),
+                performed_by_id=performed_by_id,
+                changes=changes,
+            )
+            db.add(activity_log)
+
+            await db.commit()
+            await db.refresh(admin)
+    else:
+        # Create new admin
+        admin = Admin(
+            id=str(uuid4()),
+            clerk_id=clerk_id,
+            email=email,
+            full_name=full_name,
+            password_hash=None,  # Clerk admins don't have passwords
+            role=AdminRole.ADMIN,  # Default role
+            is_active=True,
+        )
+        db.add(admin)
+
+        # Log creation activity
+        activity_log = ActivityLog(
+            id=str(uuid4()),
+            entity_type="admin",
+            entity_id=admin.id,
+            action=ActivityAction.CREATE,
+            performed_by_type=PerformedByType(performed_by_type),
+            performed_by_id=performed_by_id,
+            changes={"clerk_id": clerk_id, "email": email, "full_name": full_name, "role": AdminRole.ADMIN.value},
+        )
+        db.add(activity_log)
+
+        await db.commit()
+        await db.refresh(admin)
+
+    return admin

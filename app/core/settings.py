@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     CLERK_PUBLISHABLE_KEY: str = ""  # Optional, for frontend reference
     CLERK_JWKS_URL: str = ""  # Optional fallback, auto-derived from secret key
 
+    # Admin Clerk Authentication
+    ADMIN_EMAILS: str = ""  # Comma-separated list of admin emails
+    ADMIN_CLERK_WEBHOOK_SECRET: str = ""  # Separate webhook secret for admin sync
+
     # LiveKit Agent
     ASSEMBLYAI_API_KEY: str = ""
     DEEPGRAM_API_KEY: str = ""

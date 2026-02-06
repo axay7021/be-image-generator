@@ -11,6 +11,7 @@ from app.core.settings import settings
 from app.db import get_db
 from app.db.schema import Plan, Subscription, User
 from app.dependencies.user_auth import get_current_active_user
+from app.services.transaction_service import TransactionService
 from app.utils.response import success_response
 
 router = APIRouter(prefix="/razorpay", tags=["Razorpay"])
@@ -151,6 +152,30 @@ async def razorpay_webhook(  # noqa: PLR0912, PLR0915
                         logger.info(f"Matched plan {plan_id} via amount {amount_paid}")
 
         if user_id and plan_id:
+            # Create Transaction record for analytics and reconciliation
+            transaction_service = TransactionService(db)
+            amount_in_cents = payment.get("amount", 0)  # Razorpay amount is in paise
+            amount_usd = amount_in_cents / 100.0
+
+            await transaction_service.create_transaction(
+                user_id=user_id,
+                plan_id=plan_id,
+                amount=amount_usd,
+                currency=payment.get("currency", "INR"),
+                payment_provider="razorpay",
+                payment_provider_id=payment["id"],
+                payment_status="captured",
+                payment_metadata={
+                    "razorpay_payment_id": payment["id"],
+                    "razorpay_order_id": payment.get("order_id"),
+                    "method": payment.get("method"),
+                    "email": payment.get("email"),
+                    "contact": payment.get("contact"),
+                    "notes": notes,
+                },
+            )
+            logger.info(f"Created transaction record for Razorpay payment {payment['id']}")
+
             # Use Payment ID as key
             await handle_payment_success(user_id, plan_id, payment["id"], db)
         else:

@@ -20,6 +20,7 @@ from app.dto.subscription_dto import (
     PlanResponse,
     SubscriptionResponse,
 )
+from app.services.transaction_service import TransactionService
 from app.utils.response import success_response
 
 router = APIRouter(tags=["Subscription"])
@@ -252,6 +253,33 @@ async def handle_checkout_completed(session, db: AsyncSession):
     if not plan:
         logger.error(f"Plan {plan_id} not found")
         return
+
+    # Create Transaction record for analytics and reconciliation
+    transaction_service = TransactionService(db)
+    amount_total = session.get("amount_total", 0)  # Stripe amount is in cents
+    amount_usd = amount_total / 100.0
+
+    payment_intent_id = session.get("payment_intent")
+
+    await transaction_service.create_transaction(
+        user_id=user_id,
+        plan_id=plan_id,
+        amount=amount_usd,
+        currency=session.get("currency", "usd").upper(),
+        payment_provider="stripe",
+        payment_provider_id=payment_intent_id if isinstance(payment_intent_id, str) else session.get("id"),
+        payment_status="captured",
+        payment_metadata={
+            "stripe_session_id": session.get("id"),
+            "stripe_customer_id": session.get("customer"),
+            "stripe_payment_intent": payment_intent_id,
+            "stripe_subscription_id": session.get("subscription"),
+            "customer_email": session.get("customer_details", {}).get("email"),
+            "payment_status": session.get("payment_status"),
+            "metadata": session.get("metadata", {}),
+        },
+    )
+    logger.info(f"Created transaction record for Stripe payment {payment_intent_id or session.get('id')}")
 
     # Deactivate old active subscriptions - REMOVED to allow stacking
     # stmt = select(Subscription).where(Subscription.user_id == user_id, Subscription.status == "active")

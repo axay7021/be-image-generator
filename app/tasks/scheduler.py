@@ -5,6 +5,7 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from app.tasks.analytics_aggregation import aggregate_daily_analytics
 from app.tasks.cleanup import cleanup_all
 from app.tasks.expire_subscriptions import expire_old_subscriptions
 
@@ -42,8 +43,17 @@ def start_scheduler():
         replace_existing=True,
     )
 
+    # Schedule daily analytics aggregation to run at 4:30 AM
+    scheduler.add_job(
+        aggregate_daily_analytics,
+        trigger=CronTrigger(hour=4, minute=30),
+        id="daily_analytics_aggregation",
+        name="Aggregate daily analytics",
+        replace_existing=True,
+    )
+
     scheduler.start()
-    logger.info("Scheduler started - Cleanup will run daily at 3:00 AM, Subscription expiration at 2:00 AM")
+    logger.info("Scheduler started - Cleanup at 3:00 AM, Subscription expiration at 2:00 AM, Analytics at 4:30 AM")
 
 
 def stop_scheduler():
