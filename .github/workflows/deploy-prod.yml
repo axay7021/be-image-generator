@@ -27,3 +27,4 @@ jobs:
           source .venv/bin/activate
           pip install --upgrade pip
           pip install .
+          pm2 restart image-generator-prod
