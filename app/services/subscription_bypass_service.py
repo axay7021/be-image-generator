@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.schema import Plan, Subscription, User
 
-BASIC_PLAN_NAME = "Basic Plan"
+BASIC_PLAN_NAME = "BASIC PLAN"
 FREE_BYPASS_PROVIDER = "free_bypass"
 FREE_BYPASS_COOLDOWN_DAYS = 30
 
