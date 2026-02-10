@@ -127,12 +127,10 @@ async def grant_free_bypass(db: AsyncSession, user: User, plan: Plan) -> Subscri
 
 
 async def grant_basic_plan_to_new_user(db: AsyncSession, user: User) -> Subscription | None:
-    """Auto-grant basic plan to new user on first login"""
-    # Check if user already has any subscription
-    query = select(Subscription).where(Subscription.user_id == str(user.id)).limit(1)
-    result = await db.execute(query)
-    if result.scalar_one_or_none():
-        return None  # User already has a subscription
+    """Auto-grant basic plan to new user on first login (idempotent - uses user flag)"""
+    # Check if basic plan was already granted to this user
+    if user.basic_plan_granted:
+        return None  # Already granted - don't grant again
 
     # Get the basic plan
     basic_plan = await get_basic_plan(db)
@@ -140,4 +138,10 @@ async def grant_basic_plan_to_new_user(db: AsyncSession, user: User) -> Subscrip
         return None  # Basic plan not found
 
     # Grant the basic plan
-    return await grant_free_bypass(db, user, basic_plan)
+    subscription = await grant_free_bypass(db, user, basic_plan)
+
+    # Mark as granted on the user to prevent duplicate grants
+    user.basic_plan_granted = True
+    await db.commit()
+
+    return subscription
