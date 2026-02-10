@@ -41,7 +41,9 @@ class SubscriptionResponse(BaseModel):
 
 
 class CheckoutData(BaseModel):
-    url: str
+    url: str | None = None
+    direct_access: bool = False
+    subscription_id: str | None = None
 
 
 class CheckoutResponse(BaseModel):

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 import stripe
@@ -19,6 +19,12 @@ from app.dto.subscription_dto import (
     PlanCreateRequest,
     PlanResponse,
     SubscriptionResponse,
+)
+from app.services.subscription_bypass_service import (
+    get_purchase_gate_state,
+    grant_free_bypass,
+    is_free_bypass_plan,
+    purchase_block_reason,
 )
 from app.services.transaction_service import TransactionService
 from app.utils.response import success_response
@@ -95,6 +101,23 @@ async def create_checkout_session(
     plan = await db.get(Plan, plan_id)
     if not plan or not plan.is_active:
         raise HTTPException(status_code=404, detail="Plan not found")
+
+    gate_state = await get_purchase_gate_state(db, str(user.id))
+    now = datetime.now(timezone.utc)
+    block_reason = purchase_block_reason(gate_state, now)
+    if block_reason:
+        raise HTTPException(status_code=400, detail=block_reason)
+
+    if is_free_bypass_plan(str(plan.id)):
+        subscription = await grant_free_bypass(db, user, plan)
+        return success_response(
+            data={
+                "url": None,
+                "direct_access": True,
+                "subscription_id": str(subscription.id),
+            },
+            message="Free access granted",
+        )
 
     try:
         # Determine success/cancel URLs
