@@ -152,3 +152,48 @@ async def get_user_transactions(  # noqa: PLR0913
     transactions_data["transactions"] = [txn.model_dump() for txn in transactions_data["transactions"]]
 
     return success_response(data=transactions_data, message="User transactions retrieved")
+
+
+@router.post("/{user_id}/assign-plan/{plan_id}", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
+async def assign_plan_to_user(
+    request: Request,
+    user_id: str,
+    plan_id: str,
+    admin: CurrentActiveAdmin,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """
+    Manually assign a plan to a user (admin action - no payment required).
+
+    This endpoint allows admins to directly grant subscriptions to users.
+    Any existing active subscription is canceled before assigning the new plan.
+
+    Path Parameters:
+        - user_id: Target user ID
+        - plan_id: Plan to assign
+
+    Requires Clerk admin authentication.
+    """
+    service = UserManagementService(db)
+    subscription = await service.assign_plan_to_user(
+        user_id=user_id,
+        plan_id=plan_id,
+        admin_id=admin.id,
+    )
+
+    if not subscription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User or plan not found, or plan is inactive",
+        )
+
+    from app.dto.subscription_dto import SubscriptionResponse
+
+    subscription_response = SubscriptionResponse.model_validate(subscription)
+
+    return success_response(
+        data=subscription_response.model_dump(),
+        message="Plan assigned to user successfully",
+        status_code=status.HTTP_201_CREATED,
+    )

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.schema import Plan, Subscription, User
 
-PLUS_PLAN_ID = "d40a1c8a-f9c3-447e-83ec-31a042f12289"
+BASIC_PLAN_NAME = "Basic Plan"
 FREE_BYPASS_PROVIDER = "free_bypass"
 FREE_BYPASS_COOLDOWN_DAYS = 30
 
@@ -26,10 +26,6 @@ def _now_like(reference: datetime) -> datetime:
     if reference.tzinfo is None:
         return datetime.now()
     return datetime.now(timezone.utc)
-
-
-def is_free_bypass_plan(plan_id: str) -> bool:
-    return plan_id == PLUS_PLAN_ID
 
 
 async def get_purchase_gate_state(db: AsyncSession, user_id: str) -> PurchaseGateState:
@@ -89,13 +85,23 @@ def cooldown_elapsed(last_free_bypass_at: datetime | None, now: datetime) -> boo
 
 
 def purchase_block_reason(state: PurchaseGateState, now: datetime) -> str | None:
-    if state.total_remaining > 0:
-        return "Active subscription still has remaining quota."
+    # Block ANY purchase if user has an active subscription (already has basic plan or other)
+    if state.active_count > 0:
+        return "You already have an active plan. You cannot purchase another plan."
 
-    if not cooldown_elapsed(state.last_free_bypass_at, now):
-        return "Next free access is available after 30 days from the last free grant."
+    # Additional check: if they have remaining quota but exhausted, check cooldown
+    if state.total_remaining == 0 and state.last_free_bypass_at:
+        if not cooldown_elapsed(state.last_free_bypass_at, now):
+            return "Next free access is available after 30 days from the last free grant."
 
     return None
+
+
+async def get_basic_plan(db: AsyncSession) -> Plan | None:
+    """Get the Basic Plan by name"""
+    query = select(Plan).where(Plan.name == BASIC_PLAN_NAME)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
 
 
 async def grant_free_bypass(db: AsyncSession, user: User, plan: Plan) -> Subscription:
@@ -118,3 +124,20 @@ async def grant_free_bypass(db: AsyncSession, user: User, plan: Plan) -> Subscri
     await db.refresh(subscription)
 
     return subscription
+
+
+async def grant_basic_plan_to_new_user(db: AsyncSession, user: User) -> Subscription | None:
+    """Auto-grant basic plan to new user on first login"""
+    # Check if user already has any subscription
+    query = select(Subscription).where(Subscription.user_id == str(user.id)).limit(1)
+    result = await db.execute(query)
+    if result.scalar_one_or_none():
+        return None  # User already has a subscription
+
+    # Get the basic plan
+    basic_plan = await get_basic_plan(db)
+    if not basic_plan:
+        return None  # Basic plan not found
+
+    # Grant the basic plan
+    return await grant_free_bypass(db, user, basic_plan)

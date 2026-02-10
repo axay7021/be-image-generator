@@ -13,6 +13,7 @@ from app.dependencies.clerk_auth import get_clerk_user
 # Re-use Clerk auth dependency logic but wrapped for our User model
 from app.dependencies.clerk_auth import security as clerk_security
 from app.services import user_service
+from app.services.subscription_bypass_service import grant_basic_plan_to_new_user
 
 
 async def get_current_user(
@@ -97,6 +98,9 @@ async def get_current_user(
 
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is inactive")
+
+    # Auto-grant basic plan to new users (one-time)
+    await grant_basic_plan_to_new_user(db, user)
 
     return user
 

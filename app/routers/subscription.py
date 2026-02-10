@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Annotated, Any
 
 import stripe
@@ -22,9 +22,6 @@ from app.dto.subscription_dto import (
 )
 from app.services.subscription_bypass_service import (
     get_purchase_gate_state,
-    grant_free_bypass,
-    is_free_bypass_plan,
-    purchase_block_reason,
 )
 from app.services.transaction_service import TransactionService
 from app.utils.response import success_response
@@ -97,27 +94,31 @@ async def create_checkout_session(
     user: Annotated[User, Depends(get_current_active_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Create a Stripe Checkout session for a plan"""
+    """Request a plan subscription (admin must manually assign)"""
     plan = await db.get(Plan, plan_id)
     if not plan or not plan.is_active:
         raise HTTPException(status_code=404, detail="Plan not found")
 
+    # Check if user already has active subscription
     gate_state = await get_purchase_gate_state(db, str(user.id))
-    now = datetime.now(timezone.utc)
-    block_reason = purchase_block_reason(gate_state, now)
-    if block_reason:
-        raise HTTPException(status_code=400, detail=block_reason)
+    if gate_state.active_count > 0:
+        raise HTTPException(status_code=400, detail="You already have an active plan. Contact sales to change it.")
 
-    if is_free_bypass_plan(str(plan.id)):
-        subscription = await grant_free_bypass(db, user, plan)
-        return success_response(
-            data={
-                "url": None,
-                "direct_access": True,
-                "subscription_id": str(subscription.id),
-            },
-            message="Free access granted",
-        )
+    # Return contact sales message (payment processing disabled - handled by admin manually)
+    return success_response(
+        data={
+            "url": None,
+            "direct_access": False,
+            "subscription_id": None,
+        },
+        message=f"Plan '{plan.name}' requested. Our sales team will contact you shortly to activate your subscription.",
+    )
+
+    # ============================================
+    # STRIPE PAYMENT CODE (DISABLED)
+    # The payment flow has been replaced with admin-managed subscriptions.
+    # This code is kept for reference and can be re-enabled if needed.
+    # ============================================
 
     try:
         # Determine success/cancel URLs

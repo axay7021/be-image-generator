@@ -83,3 +83,6 @@ uv run ruff format .
 # Tests
 uv run pytest
 ```
+
+Seed the Admin
+uv run python3 scripts/seed_admins.py

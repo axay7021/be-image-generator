@@ -1,11 +1,13 @@
 """User Management Service for admin operations."""
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.logger import logger
-from app.db.schema import ActivityAction, ActivityLog, ImageLog, PerformedByType, Subscription, Transaction, User
+from app.db.schema import ActivityAction, ActivityLog, ImageLog, PerformedByType, Plan, Subscription, Transaction, User
 from app.dto.subscription_dto import PlanResponse, SubscriptionResponse
 from app.dto.transaction_dto import TransactionResponse
 from app.dto.user_management_dto import (
@@ -337,3 +339,86 @@ class UserManagementService:
             "skip": skip,
             "limit": limit,
         }
+
+    async def assign_plan_to_user(
+        self,
+        user_id: str,
+        plan_id: str,
+        admin_id: str,
+    ) -> Subscription | None:
+        """
+        Manually assign a plan to a user (admin action - no payment required).
+
+        Args:
+            user_id: Target user ID
+            plan_id: Plan to assign
+            admin_id: Admin performing the action
+
+        Returns:
+            Created Subscription or None if user/plan not found
+        """
+        # Verify user exists
+        user = await self.db.get(User, user_id)
+        if not user:
+            logger.warning(f"Admin {admin_id} tried to assign plan to non-existent user {user_id}")
+            return None
+
+        # Verify plan exists and is active
+        plan = await self.db.get(Plan, plan_id)
+        if not plan or not plan.is_active:
+            logger.warning(f"Admin {admin_id} tried to assign inactive/non-existent plan {plan_id} to user {user_id}")
+            return None
+
+        # Cancel any existing active subscriptions for this user
+        cancel_query = select(Subscription).where(
+            Subscription.user_id == user_id,
+            Subscription.status == "active",
+        )
+        cancel_result = await self.db.execute(cancel_query)
+        existing_subs = cancel_result.scalars().all()
+        for sub in existing_subs:
+            sub.status = "canceled"
+            logger.info(f"Canceled subscription {sub.id} for user {user_id} due to new plan assignment")
+
+        # Create new subscription
+        now = datetime.now(timezone.utc)
+        period_end = now + timedelta(days=plan.validity_days)
+
+        new_subscription = Subscription(
+            user_id=user_id,
+            plan_id=plan_id,
+            payment_provider="admin_manual",
+            status="active",
+            quota_used=0,
+            period_start=now,
+            period_end=period_end,
+            image_generation_limit=plan.image_quota,
+        )
+
+        self.db.add(new_subscription)
+
+        # Log activity
+        activity_log = ActivityLog(
+            entity_type="subscription",
+            entity_id=str(new_subscription.id),
+            action=ActivityAction.CREATE,
+            performed_by_type=PerformedByType.ADMIN,
+            performed_by_id=admin_id,
+            changes={
+                "user_id": user_id,
+                "plan_id": plan_id,
+                "plan_name": plan.name,
+                "image_quota": plan.image_quota,
+                "validity_days": plan.validity_days,
+                "method": "admin_manual",
+            },
+        )
+        self.db.add(activity_log)
+
+        await self.db.commit()
+        await self.db.refresh(new_subscription)
+
+        logger.info(
+            f"Admin {admin_id} assigned plan {plan.name} ({plan_id}) to user {user_id} (subscription {new_subscription.id})"
+        )
+        return new_subscription
