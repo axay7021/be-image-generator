@@ -34,13 +34,33 @@ from app.i18n import msg
 from app.services.email_service import email_service
 
 
-async def authenticate_admin(email: str, password: str, request: Request, db: AsyncSession) -> tuple[str, str]:
+async def authenticate_admin(  # noqa: PLR0915
+    email: str, password: str, request: Request, db: AsyncSession
+) -> tuple[str, str]:
     """
-    Authenticate admin and return tokens
+    Authenticate admin and return tokens.
+    Only admins defined in ADMIN_CREDENTIALS environment variable can login.
     """
     # Get request metadata
     user_agent = request.headers.get("user-agent", "Unknown")
     ip_address = request.client.host if request.client else "Unknown"
+
+    # Validate admin email is in ADMIN_CREDENTIALS
+    admin_credentials = settings.get_admin_credentials()
+    if email not in admin_credentials:
+        login_log = LoginHistory(
+            email=email,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status=LoginStatus.FAILED,
+            failure_reason="Email not authorized for admin access",
+        )
+        db.add(login_log)
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid credentials",
+        )
 
     # Find admin by email
     query = select(Admin).where(Admin.email == email)
@@ -54,12 +74,12 @@ async def authenticate_admin(email: str, password: str, request: Request, db: As
             ip_address=ip_address,
             user_agent=user_agent,
             status=LoginStatus.FAILED,
-            failure_reason="Invalid email",
+            failure_reason="Admin not found in database",
         )
         db.add(login_log)
         await db.commit()
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Invalid credentials",
         )
 
@@ -76,7 +96,7 @@ async def authenticate_admin(email: str, password: str, request: Request, db: As
         db.add(login_log)
         await db.commit()
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Invalid credentials",
         )
 
@@ -501,7 +521,7 @@ async def revoke_all_sessions(admin_id: str, current_ip: str, db: AsyncSession) 
     return len(sessions)
 
 
-async def sync_clerk_admin(
+async def sync_clerk_admin(  # noqa: PLR0913
     clerk_id: str,
     email: str,
     full_name: str,

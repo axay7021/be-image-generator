@@ -8,8 +8,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.db.schema import Admin
-from app.dependencies.clerk_admin_auth import get_clerk_admin
+from app.dependencies.auth import CurrentActiveAdmin
 from app.dto.reconciliation_dto import (
     DiscrepanciesResponse,
     DiscrepancyItem,
@@ -27,7 +26,7 @@ limiter = Limiter(key_func=get_remote_address)
 async def sync_payments(
     http_request: Request,
     request: ReconciliationSyncRequest,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
@@ -55,8 +54,8 @@ async def sync_payments(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Stripe reconciliation not yet implemented"
             )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
 
     return success_response(
         data=report.model_dump(),
@@ -69,7 +68,7 @@ async def sync_payments(
 @limiter.limit("20/minute")
 async def get_discrepancies(
     request: Request,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
@@ -103,7 +102,7 @@ async def get_discrepancies(
 async def manual_reconcile_transaction(
     request: Request,
     transaction_id: str,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
     notes: str = None,
 ):

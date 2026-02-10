@@ -54,10 +54,29 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Admin JWT Credentials (from .env file)
+    # Format: admin1@example.com:password1,admin2@example.com:password2
+    ADMIN_CREDENTIALS: str = ""  # Comma-separated email:password pairs
+
     # Super Admin
     SUPER_ADMIN_EMAIL: str = "admin@example.com"
     SUPER_ADMIN_PASSWORD: str = "admin123"
     SUPER_ADMIN_NAME: str = "Super Admin"
+
+    def get_admin_credentials(self) -> dict[str, str]:
+        """
+        Parse admin credentials from ADMIN_CREDENTIALS env variable.
+        Format: email1:password1,email2:password2
+        Returns: {email: password, ...}
+        """
+        admins = {}
+        if self.ADMIN_CREDENTIALS:
+            pairs = self.ADMIN_CREDENTIALS.split(",")
+            for pair in pairs:
+                if ":" in pair:
+                    email, password = pair.strip().split(":", 1)
+                    admins[email.strip()] = password.strip()
+        return admins
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
@@ -70,10 +89,6 @@ class Settings(BaseSettings):
     CLERK_WEBHOOK_SECRET: str = ""
     CLERK_PUBLISHABLE_KEY: str = ""  # Optional, for frontend reference
     CLERK_JWKS_URL: str = ""  # Optional fallback, auto-derived from secret key
-
-    # Admin Clerk Authentication
-    ADMIN_EMAILS: str = ""  # Comma-separated list of admin emails
-    ADMIN_CLERK_WEBHOOK_SECRET: str = ""  # Separate webhook secret for admin sync
 
     # LiveKit Agent
     ASSEMBLYAI_API_KEY: str = ""

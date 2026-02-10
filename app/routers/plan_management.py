@@ -8,8 +8,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.db.schema import Admin
-from app.dependencies.clerk_admin_auth import get_clerk_admin
+from app.dependencies.auth import CurrentActiveAdmin
 from app.dto.plan_management_dto import (
     PlanCreateRequest,
     PlanListResponse,
@@ -29,7 +28,7 @@ limiter = Limiter(key_func=get_remote_address)
 async def create_plan(
     request: Request,
     body: PlanCreateRequest,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
@@ -51,8 +50,8 @@ async def create_plan(
             billing_interval=body.billing_interval,
             is_popular=body.is_popular,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
 
     plan_response = PlanResponse(
         id=str(plan.id),
@@ -76,7 +75,7 @@ async def create_plan(
 @limiter.limit("30/minute")
 async def list_plans(
     request: Request,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
     include_inactive: bool = Query(default=False, description="Include inactive plans"),
 ):
@@ -117,7 +116,7 @@ async def list_plans(
 async def get_plan(
     request: Request,
     plan_id: str,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
@@ -154,7 +153,7 @@ async def update_plan(
     request: Request,
     plan_id: str,
     body: PlanUpdateRequest,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
@@ -201,7 +200,7 @@ async def update_plan(
 async def delete_plan(
     request: Request,
     plan_id: str,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
@@ -214,8 +213,8 @@ async def delete_plan(
 
     try:
         success = await service.delete_plan(plan_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
 
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
@@ -228,7 +227,7 @@ async def delete_plan(
 async def get_plan_stats(
     request: Request,
     plan_id: str,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """

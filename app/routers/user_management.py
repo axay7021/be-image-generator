@@ -8,8 +8,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.db.schema import Admin
-from app.dependencies.clerk_admin_auth import get_clerk_admin
+from app.dependencies.auth import CurrentActiveAdmin
 from app.dto.user_management_dto import (
     UserListFilters,
     UserStatusUpdateRequest,
@@ -23,9 +22,9 @@ limiter = Limiter(key_func=get_remote_address)
 
 @router.get("/", status_code=status.HTTP_200_OK)
 @limiter.limit("30/minute")
-async def list_users(
+async def list_users(  # noqa: PLR0913
     request: Request,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
     search: str | None = Query(None, description="Search by email, phone, or name"),
     is_active: bool | None = Query(None, description="Filter by active status"),
@@ -59,14 +58,13 @@ async def list_users(
 async def get_user_detail(
     request: Request,
     user_id: str,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
     Get detailed information about a specific user.
 
     Includes subscriptions, transaction count, and quota summary.
-    Requires Clerk admin authentication.
     """
     service = UserManagementService(db)
     user_detail = await service.get_user_detail(user_id)
@@ -83,14 +81,13 @@ async def update_user_status(
     request: Request,
     user_id: str,
     body: UserStatusUpdateRequest,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
     Update user status (block/unblock).
 
     Logs the action to ActivityLog with optional reason.
-    Requires Clerk admin authentication.
     """
     service = UserManagementService(db)
     success = await service.update_user_status(
@@ -108,10 +105,10 @@ async def update_user_status(
 
 @router.get("/{user_id}/activity", status_code=status.HTTP_200_OK)
 @limiter.limit("30/minute")
-async def get_user_activity(
+async def get_user_activity(  # noqa: PLR0913
     request: Request,
     user_id: str,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = Query(default=0, ge=0, description="Number of records to skip"),
     limit: int = Query(default=50, ge=1, le=100, description="Maximum records to return"),
@@ -120,7 +117,6 @@ async def get_user_activity(
     Get paginated activity logs for a specific user.
 
     Returns ImageLog entries (image generation history).
-    Requires Clerk admin authentication.
     """
     service = UserManagementService(db)
     activity = await service.get_user_activity(user_id, skip=skip, limit=limit)
@@ -133,10 +129,10 @@ async def get_user_activity(
 
 @router.get("/{user_id}/transactions", status_code=status.HTTP_200_OK)
 @limiter.limit("30/minute")
-async def get_user_transactions(
+async def get_user_transactions(  # noqa: PLR0913
     request: Request,
     user_id: str,
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = Query(default=0, ge=0, description="Number of records to skip"),
     limit: int = Query(default=50, ge=1, le=100, description="Maximum records to return"),
@@ -145,7 +141,6 @@ async def get_user_transactions(
     Get paginated transaction history for a specific user.
 
     Returns all transactions with payment and reconciliation status.
-    Requires Clerk admin authentication.
     """
     service = UserManagementService(db)
     transactions_data = await service.get_user_transactions(user_id, skip=skip, limit=limit)

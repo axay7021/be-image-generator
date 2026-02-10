@@ -1,16 +1,14 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, Request, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from svix.webhooks import Webhook, WebhookVerificationError
 
 from app.core.settings import settings
 from app.db import get_db
-from app.db.schema import Admin, LoginHistory
+from app.db.schema import LoginHistory
 from app.dependencies.auth import CurrentActiveAdmin
-from app.dependencies.clerk_admin_auth import get_clerk_admin
 from app.dto.auth_dto import (
     AdminResponse,
     LoginHistoryResponse,
@@ -289,123 +287,3 @@ async def get_login_history(
     ]
 
     return success_response(data=history_data, message=msg("LOGIN_HISTORY_RETRIEVED"))
-
-
-# ============================================
-# Clerk Admin Authentication
-# ============================================
-
-
-@router.get("/clerk/me")
-async def get_clerk_admin_profile(
-    current_admin: Annotated[Admin, Depends(get_clerk_admin)],
-):
-    """
-    Get current admin profile (Clerk-authenticated).
-
-    This endpoint is for admins who authenticate via Clerk.
-    Returns admin profile information.
-    """
-    admin_data = AdminResponse(
-        id=current_admin.id,
-        email=current_admin.email,
-        full_name=current_admin.full_name,
-        role=current_admin.role.value,
-        is_active=current_admin.is_active,
-        created_at=current_admin.created_at,
-        updated_at=current_admin.updated_at,
-    ).model_dump()
-
-    return success_response(data=admin_data, message="Admin profile retrieved successfully")
-
-
-@router.post("/clerk/webhook")
-async def clerk_admin_webhook(
-    request: Request,
-    svix_id: Annotated[str | None, Header(alias="svix-id")] = None,
-    svix_timestamp: Annotated[str | None, Header(alias="svix-timestamp")] = None,
-    svix_signature: Annotated[str | None, Header(alias="svix-signature")] = None,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Webhook endpoint for Clerk admin user sync.
-
-    Handles events:
-    - user.created: Create admin record when new admin signs up via Clerk
-    - user.updated: Update admin info when changed in Clerk
-    - user.deleted: Deactivate admin when deleted in Clerk
-    """
-    if not settings.ADMIN_CLERK_WEBHOOK_SECRET:
-        return success_response(message="Admin Clerk webhook not configured", data={"processed": False})
-
-    # Verify webhook signature
-    if not svix_id or not svix_timestamp or not svix_signature:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Svix headers")
-
-    # Get the raw body
-    body = await request.body()
-
-    try:
-        wh = Webhook(settings.ADMIN_CLERK_WEBHOOK_SECRET)
-        payload = wh.verify(
-            body, {"svix-id": svix_id, "svix-timestamp": svix_timestamp, "svix-signature": svix_signature}
-        )
-    except WebhookVerificationError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Webhook verification failed: {str(e)}")
-
-    event_type = payload.get("type")
-    data = payload.get("data", {})
-
-    clerk_id = data.get("id")
-    email_addresses = data.get("email_addresses", [])
-    primary_email = next(
-        (
-            email["email_address"]
-            for email in email_addresses
-            if email.get("id") == data.get("primary_email_address_id")
-        ),
-        None,
-    )
-
-    if event_type in ["user.created", "user.updated"]:
-        # Validate email against whitelist
-        if settings.ADMIN_EMAILS:
-            admin_emails = [e.strip() for e in settings.ADMIN_EMAILS.split(",")]
-            if primary_email not in admin_emails:
-                logger.warning(
-                    f"Clerk webhook: Email {primary_email} not in admin whitelist, not creating admin record"
-                )
-                return success_response(
-                    message=f"Email {primary_email} is not authorized as an admin",
-                    data={"processed": False, "reason": "email_not_whitelisted"},
-                    status_code=200,
-                )
-
-        # Extract name
-        first_name = data.get("first_name", "")
-        last_name = data.get("last_name", "")
-        full_name = f"{first_name} {last_name}".strip() or primary_email.split("@")[0]
-
-        # Sync admin
-        await admin_service.sync_clerk_admin(
-            clerk_id=clerk_id, email=primary_email, full_name=full_name, db=db, performed_by_type="ai_agent"
-        )
-
-        return success_response(
-            message=f"Admin {event_type} processed successfully", data={"clerk_id": clerk_id, "email": primary_email}
-        )
-
-    elif event_type == "user.deleted":
-        if not clerk_id:
-            return success_response(message="Missing clerk_id in deletion event", data={"processed": False})
-
-        # Deactivate admin
-        result = await db.execute(select(Admin).where(Admin.clerk_id == clerk_id))
-        admin = result.scalar_one_or_none()
-
-        if admin:
-            admin.is_active = False
-            await db.commit()
-            return success_response(message="Admin deactivated successfully", data={"clerk_id": clerk_id})
-
-    return success_response(message=f"Event {event_type} received but not processed", data={"event_type": event_type})

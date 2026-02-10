@@ -10,8 +10,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.db.schema import Admin
-from app.dependencies.clerk_admin_auth import get_clerk_admin
+from app.dependencies.auth import CurrentActiveAdmin
 from app.dto.analytics_dto import (
     Period,
 )
@@ -26,7 +25,7 @@ limiter = Limiter(key_func=get_remote_address)
 @router.get("/overview", response_model=dict)
 @limiter.limit("20/minute")
 async def get_dashboard_overview(
-    request: Request, admin: Annotated[Admin, Depends(get_clerk_admin)], db: Annotated[AsyncSession, Depends(get_db)]
+    request: Request, admin: CurrentActiveAdmin, db: Annotated[AsyncSession, Depends(get_db)]
 ):
     """Get quick overview stats for admin dashboard."""
     overview = await AnalyticsService.get_dashboard_overview(db)
@@ -35,13 +34,13 @@ async def get_dashboard_overview(
 
 @router.get("/sales", response_model=dict)
 @limiter.limit("20/minute")
-async def get_sales_analytics(
+async def get_sales_analytics(  # noqa: PLR0913
     request: Request,
     start_date: Annotated[date, Query(description="Start date (YYYY-MM-DD)")],
     end_date: Annotated[date, Query(description="End date (YYYY-MM-DD)")],
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
-    period: Period = Query(default="daily", description="Aggregation period: daily, weekly, or monthly"),
+    period: Annotated[Period, Query(description="Aggregation period: daily, weekly, or monthly")] = "daily",
 ):
     """
     Get sales analytics with revenue breakdown.
@@ -55,13 +54,13 @@ async def get_sales_analytics(
 
 @router.get("/traffic", response_model=dict)
 @limiter.limit("20/minute")
-async def get_traffic_analytics(
+async def get_traffic_analytics(  # noqa: PLR0913
     request: Request,
     start_date: Annotated[date, Query(description="Start date (YYYY-MM-DD)")],
     end_date: Annotated[date, Query(description="End date (YYYY-MM-DD)")],
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
-    period: Period = Query(default="daily", description="Aggregation period: daily, weekly, or monthly"),
+    period: Annotated[Period, Query(description="Aggregation period: daily, weekly, or monthly")] = "daily",
 ):
     """
     Get user traffic and registration analytics.
@@ -79,7 +78,7 @@ async def get_plan_analytics(
     request: Request,
     start_date: Annotated[date, Query(description="Start date (YYYY-MM-DD)")],
     end_date: Annotated[date, Query(description="End date (YYYY-MM-DD)")],
-    admin: Annotated[Admin, Depends(get_clerk_admin)],
+    admin: CurrentActiveAdmin,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
