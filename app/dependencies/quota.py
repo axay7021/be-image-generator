@@ -14,10 +14,25 @@ from app.exceptions.quota_exception import QuotaLimitExceeded
 
 
 def get_client_ip(request: Request) -> str:
-    """Helper to get the real client IP, considering proxies"""
+    """
+    Resolve the real client IP address.
+
+    Priority order:
+    1. CF-Connecting-IP  — set by Cloudflare with the actual visitor IP (cannot be
+       spoofed by the client; Cloudflare always overwrites it).
+    2. X-Forwarded-For   — first entry, for non-Cloudflare reverse proxies.
+    3. request.client.host — direct connection fallback.
+    """
+    # Cloudflare environment: use the dedicated header
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        return cf_ip.strip()
+
+    # Generic reverse proxy (Nginx, Caddy, etc.)
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         return forwarded.split(",")[0].strip()
+
     return request.client.host if request.client else "unknown"
 
 
@@ -30,14 +45,14 @@ async def check_quota(
     """
     Check if the user (or anonymous IP) has sufficient quota.
     Returns the remaining quota count or raises 429.
-    """
-    # Bypass quota check in development environment - OPTIONAL: Toggle off if testing quota
-    # if settings.ENVIRONMENT == "development":
-    #     print("DEBUG: Dev mode, quota bypassed.")
-    #     return 999999
 
+    For anonymous users we track by BOTH the real IP (CF-Connecting-IP) AND
+    an anonymous session cookie so that Cloudflare's rotating edge IPs cannot
+    be exploited to bypass the daily limit.
+    """
     today = date.today()
     client_ip = get_client_ip(request)
+    anon_session_id = request.cookies.get("anon_session")
 
     # 1. Anonymous User
     if not user:
@@ -45,17 +60,26 @@ async def check_quota(
             raise QuotaLimitExceeded(
                 detail="High-resolution features require an active subscription. Please sign in or subscribe."
             )
-        print(f"DEBUG: Anonymous user check for IP {client_ip}.")
+        print(f"DEBUG: Anonymous user check for IP {client_ip}, session={anon_session_id}.")
 
-        # Check daily usage
-        query = select(DailyUsage).where(DailyUsage.identifier == client_ip, DailyUsage.date == today)
+        # Build a list of identifiers to check (IP + cookie session if present).
+        # If ANY identifier has hit the limit, the user is blocked.
+        identifiers_to_check = [client_ip]
+        if anon_session_id and anon_session_id != client_ip:
+            identifiers_to_check.append(anon_session_id)
+
+        query = select(DailyUsage).where(
+            DailyUsage.identifier.in_(identifiers_to_check),
+            DailyUsage.date == today,
+        )
         result = await db.execute(query)
-        daily_usage = result.scalar_one_or_none()
+        rows = result.scalars().all()
 
-        usage_count = daily_usage.usage_count if daily_usage else 0
+        # Total usage across all matching identifiers
+        usage_count = sum(r.usage_count for r in rows)
         limit = 1  # Free tier limit
 
-        print(f"DEBUG: Anonymous usage: {usage_count}/{limit}")
+        print(f"DEBUG: Anonymous usage: {usage_count}/{limit} (checked identifiers: {identifiers_to_check})")
 
         if usage_count >= limit:
             raise QuotaLimitExceeded(
@@ -154,24 +178,34 @@ async def increment_quota(
     client_ip = get_client_ip(request)
 
     if not user:
-        # Anonymous: Atomically upsert DailyUsage record by IP.
-        # IMPORTANT: 'id' must be supplied explicitly because it is a Python-side UUID
-        # default (not a server_default). If omitted PostgreSQL raises a NOT NULL
-        # violation and the row is never written, allowing unlimited free generations.
-        stmt = (
-            pg_insert(DailyUsage)
-            .values(
-                id=str(uuid4()),
-                identifier=client_ip,
-                date=today,
-                usage_count=cost,
+        # Anonymous: Atomically upsert DailyUsage for BOTH the real IP AND the
+        # anonymous session cookie (if present). This dual-write ensures that even
+        # when Cloudflare rotates edge IPs between requests, the cookie ID still
+        # matches an existing usage row and blocks further free generations.
+        anon_session_id = request.cookies.get("anon_session")
+
+        async def _upsert_daily(identifier: str) -> None:
+            stmt = (
+                pg_insert(DailyUsage)
+                .values(
+                    id=str(uuid4()),
+                    identifier=identifier,
+                    date=today,
+                    usage_count=cost,
+                )
+                .on_conflict_do_update(
+                    constraint="uq_daily_usage_identifier_date",
+                    set_={"usage_count": DailyUsage.usage_count + cost},
+                )
             )
-            .on_conflict_do_update(
-                constraint="uq_daily_usage_identifier_date",
-                set_={"usage_count": DailyUsage.usage_count + cost},
-            )
-        )
-        await db.execute(stmt)
+            await db.execute(stmt)
+
+        # Always track by real IP
+        await _upsert_daily(client_ip)
+
+        # Also track by session cookie so IP rotation doesn’t bypass the limit
+        if anon_session_id and anon_session_id != client_ip:
+            await _upsert_daily(anon_session_id)
 
     else:
         # Authenticated - Increment on oldest active subscription (FIFO)

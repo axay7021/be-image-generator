@@ -1,6 +1,8 @@
 import io
 import logging
+from datetime import date, datetime, timezone
 from typing import Annotated
+from uuid import uuid4
 
 import cv2
 import numpy as np
@@ -663,7 +665,24 @@ async def modify_image(
             db.add(log_entry)
             await db.commit()
 
-            return StreamingResponse(io.BytesIO(modified_image_data), media_type="image/png")
+            response = StreamingResponse(io.BytesIO(modified_image_data), media_type="image/png")
+
+            # For anonymous users: set a stable session cookie so the quota is
+            # enforced even when Cloudflare rotates the edge IP between requests.
+            if not user:
+                session_id = request.cookies.get("anon_session") or str(uuid4())
+                # Expire at midnight UTC today so it resets with the daily quota
+                midnight_utc = datetime.combine(date.today(), datetime.min.time(), tzinfo=timezone.utc)
+                midnight_ts = int(midnight_utc.timestamp()) + 86400  # next midnight
+                response.set_cookie(
+                    key="anon_session",
+                    value=session_id,
+                    httponly=True,
+                    samesite="lax",
+                    max_age=midnight_ts - int(datetime.now(timezone.utc).timestamp()),
+                )
+
+            return response
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
