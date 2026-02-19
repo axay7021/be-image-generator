@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import Depends, Request
 from sqlalchemy import select
@@ -154,14 +155,19 @@ async def increment_quota(
 
     if not user:
         # Anonymous: Atomically upsert DailyUsage record by IP.
-        # Using PostgreSQL INSERT ... ON CONFLICT DO UPDATE to prevent race conditions
-        # where two near-simultaneous requests both pass the quota check before
-        # either has committed a usage row (the root cause of the cookie-deletion bypass).
+        # IMPORTANT: 'id' must be supplied explicitly because it is a Python-side UUID
+        # default (not a server_default). If omitted PostgreSQL raises a NOT NULL
+        # violation and the row is never written, allowing unlimited free generations.
         stmt = (
             pg_insert(DailyUsage)
-            .values(identifier=client_ip, date=today, usage_count=cost)
+            .values(
+                id=str(uuid4()),
+                identifier=client_ip,
+                date=today,
+                usage_count=cost,
+            )
             .on_conflict_do_update(
-                index_elements=["identifier", "date"],
+                constraint="uq_daily_usage_identifier_date",
                 set_={"usage_count": DailyUsage.usage_count + cost},
             )
         )
@@ -207,12 +213,18 @@ async def increment_quota(
                     break
 
         if not quota_incremented or remaining_cost > 0:
-            # Fallback: Atomically upsert DailyUsage by User ID
+            # Fallback: Atomically upsert DailyUsage by User ID.
+            # 'id' must be provided explicitly (Python-side UUID default).
             stmt = (
                 pg_insert(DailyUsage)
-                .values(identifier=str(user.id), date=today, usage_count=remaining_cost)
+                .values(
+                    id=str(uuid4()),
+                    identifier=str(user.id),
+                    date=today,
+                    usage_count=remaining_cost,
+                )
                 .on_conflict_do_update(
-                    index_elements=["identifier", "date"],
+                    constraint="uq_daily_usage_identifier_date",
                     set_={"usage_count": DailyUsage.usage_count + remaining_cost},
                 )
             )
