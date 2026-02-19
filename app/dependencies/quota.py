@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -152,19 +153,21 @@ async def increment_quota(
     client_ip = get_client_ip(request)
 
     if not user:
-        # Anonymous: Increment DailyUsage by IP
-        query = select(DailyUsage).where(DailyUsage.identifier == client_ip, DailyUsage.date == today)
-        result = await db.execute(query)
-        daily_usage = result.scalar_one_or_none()
-
-        if daily_usage:
-            daily_usage.usage_count += cost
-        else:
-            daily_usage = DailyUsage(identifier=client_ip, date=today, usage_count=cost)
-            db.add(daily_usage)
+        # Anonymous: Atomically upsert DailyUsage record by IP.
+        # Using PostgreSQL INSERT ... ON CONFLICT DO UPDATE to prevent race conditions
+        # where two near-simultaneous requests both pass the quota check before
+        # either has committed a usage row (the root cause of the cookie-deletion bypass).
+        stmt = (
+            pg_insert(DailyUsage)
+            .values(identifier=client_ip, date=today, usage_count=cost)
+            .on_conflict_do_update(
+                index_elements=["identifier", "date"],
+                set_={"usage_count": DailyUsage.usage_count + cost},
+            )
+        )
+        await db.execute(stmt)
 
     else:
-        # Authenticated
         # Authenticated - Increment on oldest active subscription (FIFO)
         query = (
             select(Subscription)
@@ -204,15 +207,15 @@ async def increment_quota(
                     break
 
         if not quota_incremented or remaining_cost > 0:
-            # Fallback to daily usage by User ID (only if paid quota wasn't enough)
-            query = select(DailyUsage).where(DailyUsage.identifier == str(user.id), DailyUsage.date == today)
-            result = await db.execute(query)
-            daily_usage = result.scalar_one_or_none()
-
-            if daily_usage:
-                daily_usage.usage_count += cost
-            else:
-                daily_usage = DailyUsage(identifier=str(user.id), date=today, usage_count=cost)
-                db.add(daily_usage)
+            # Fallback: Atomically upsert DailyUsage by User ID
+            stmt = (
+                pg_insert(DailyUsage)
+                .values(identifier=str(user.id), date=today, usage_count=remaining_cost)
+                .on_conflict_do_update(
+                    index_elements=["identifier", "date"],
+                    set_={"usage_count": DailyUsage.usage_count + remaining_cost},
+                )
+            )
+            await db.execute(stmt)
 
     await db.commit()

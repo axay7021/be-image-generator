@@ -83,6 +83,56 @@ def detect_face_mediapipe(image_bytes):
         return 0
 
 
+def is_real_human_face(image_bytes: bytes) -> bool:
+    """
+    Heuristic check to detect if an image is a real photograph vs. an animated,
+    cartoon, or illustrated image.
+
+    Uses two OpenCV-based signals:
+    - HSV Saturation std-dev: Animated/illustrated images tend to have flat,
+      uniform saturation (low std-dev). Real photos have varied saturation.
+    - Laplacian variance (texture complexity): Real photos have high frequency
+      detail. Cartoons and anime have smooth, low-detail regions.
+
+    Returns True if image appears to be a real photograph, False if animated.
+    Fails open (returns True) on inconclusive or error to avoid false-negatives
+    on low-quality real photos.
+    """
+    # Thresholds (tuned empirically — lower = more permissive)
+    MIN_SATURATION_STD = 18.0  # Below this → suspiciously flat colors
+    MIN_LAPLACIAN_VAR = 80.0  # Below this → suspiciously smooth texture
+
+    try:
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return True  # Fail open
+
+        # Resize to a fixed analysis size for consistency
+        analysis_img = cv2.resize(img, (256, 256))
+
+        # Signal 1: Saturation variance in HSV space
+        hsv = cv2.cvtColor(analysis_img, cv2.COLOR_BGR2HSV)
+        saturation_channel = hsv[:, :, 1].astype(np.float32)
+        sat_std = float(np.std(saturation_channel))
+
+        # Signal 2: Laplacian variance (texture / edge complexity)
+        gray = cv2.cvtColor(analysis_img, cv2.COLOR_BGR2GRAY)
+        laplacian_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+        logger.debug(f"Image realism check — saturation_std: {sat_std:.2f}, laplacian_var: {laplacian_var:.2f}")
+
+        # Both signals must indicate real photo; a cartoon typically fails both
+        if sat_std < MIN_SATURATION_STD and laplacian_var < MIN_LAPLACIAN_VAR:
+            return False
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Error in animated face detection: {e}")
+        return True  # Fail open on error
+
+
 def process_gemini_image(input_image_bytes, prompt):
     """Sends image and prompt to Gemini and returns (modified_image_bytes, cost_info, error_message)."""
     if not client:
@@ -144,12 +194,28 @@ async def validate_image(file: UploadFile = File(...)):
     try:
         image_bytes = await file.read()
         face_count = detect_face_mediapipe(image_bytes)
+
         if face_count == 0:
             return {
                 "valid": False,
                 "message": "No human face detected. Please upload a photo with a visible face.",
                 "debug_count": face_count,
             }
+
+        if face_count > 1:
+            return {
+                "valid": False,
+                "message": "Multiple faces detected. Please upload a photo with only one face.",
+                "debug_count": face_count,
+            }
+
+        if not is_real_human_face(image_bytes):
+            return {
+                "valid": False,
+                "message": "Animated or illustrated images are not supported. Please upload a real photograph.",
+                "debug_count": face_count,
+            }
+
         return {"valid": True, "message": "Face detected.", "debug_count": face_count}
     except Exception as e:
         logger.error(f"Validation error: {e}")
@@ -295,11 +361,25 @@ async def modify_image(
 
         image_bytes = await file.read()
 
-        # Local Face Detection
-        if detect_face_mediapipe(image_bytes) == 0:
+        # Local Face Detection — reject missing, multiple faces, and animated images
+        face_count = detect_face_mediapipe(image_bytes)
+
+        if face_count == 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No human face detected. Please upload a photo with a visible face.",
+            )
+
+        if face_count > 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Multiple faces detected. Only one face is allowed per image.",
+            )
+
+        if not is_real_human_face(image_bytes):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Animated or illustrated images are not supported. Please upload a real photograph.",
             )
 
         # Prompt construction (Simplified from POC for brevity, ideally share logic)

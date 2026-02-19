@@ -9,15 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.db import Base, get_db
-from app.main import app
-
 sys.modules["cv2"] = MagicMock()
 sys.modules["mediapipe"] = MagicMock()
 sys.modules["stripe"] = MagicMock()
 sys.modules["google"] = MagicMock()
 sys.modules["google.genai"] = MagicMock()
 
+from app.db import Base, get_db  # noqa: E402
+from app.main import app  # noqa: E402
 
 # Use SQLite for testing to avoid external dependencies
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
