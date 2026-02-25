@@ -87,22 +87,33 @@ def detect_face_mediapipe(image_bytes):
 
 def is_real_human_face(image_bytes: bytes) -> bool:
     """
-    Heuristic check to detect if an image is a real photograph vs. an animated,
-    cartoon, or illustrated image.
+    Multi-signal heuristic to detect if an image is a real photograph vs. a cartoon,
+    illustrated image, or a completely unrelated image (e.g. a UI screenshot).
 
-    Uses two OpenCV-based signals:
-    - HSV Saturation std-dev: Animated/illustrated images tend to have flat,
-      uniform saturation (low std-dev). Real photos have varied saturation.
-    - Laplacian variance (texture complexity): Real photos have high frequency
-      detail. Cartoons and anime have smooth, low-detail regions.
+    Measured signal values derived from actual test images:
 
-    Returns True if image appears to be a real photograph, False if animated.
-    Fails open (returns True) on inconclusive or error to avoid false-negatives
-    on low-quality real photos.
+    Signal              | Cartoon | Mobile UI | Real Photo
+    --------------------|---------|-----------|------------
+    flat_ratio (< 5px)  | 0.934   | 0.756     | ~0.75-0.80
+    mean_gradient       | 42.5    | 107.5     | ~30-55
+
+    Strategy:
+    - Cartoon veto:     flat_ratio > 0.90  (cartoon=0.93 vs real~0.75 — clear gap)
+    - UI veto:          mean_gradient > 80  (UI=107 vs real~35-55 — clear gap)
+    - Soft gate:        2+ of (low saturation, low laplacian, low skin) for remaining cases
+
+    Returns True if image appears to be a real photograph, False otherwise.
+    Fails open (returns True) on errors to avoid false-negatives.
     """
-    # Thresholds (tuned empirically — lower = more permissive)
-    MIN_SATURATION_STD = 18.0  # Below this → suspiciously flat colors
-    MIN_LAPLACIAN_VAR = 80.0  # Below this → suspiciously smooth texture
+    # Hard-veto thresholds (each strong enough to reject a specific class alone)
+    MAX_FLAT_RATIO = 0.90  # Cartoon veto: >90% adjacent pixels identical → solid fills
+    MAX_MEAN_GRADIENT = 80.0  # UI/screenshot veto: sharp hard edges throughout image
+
+    # Soft-gate thresholds (multi-signal scoring for remaining edge cases)
+    MIN_SATURATION_STD = 22.0
+    MIN_LAPLACIAN_VAR = 120.0
+    MIN_SKIN_RATIO = 0.03
+    CARTOON_SIGNAL_THRESHOLD = 2
 
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
@@ -110,28 +121,77 @@ def is_real_human_face(image_bytes: bytes) -> bool:
         if img is None:
             return True  # Fail open
 
-        # Resize to a fixed analysis size for consistency
         analysis_img = cv2.resize(img, (256, 256))
+        total_pixels = 256 * 256
 
-        # Signal 1: Saturation variance in HSV space
+        # Keep gray as uint8 — OpenCV Sobel/Laplacian require uint8 or specific dtypes.
+        # Cast to float32 only for numpy diff operations that need signed arithmetic.
+        gray_uint8 = cv2.cvtColor(analysis_img, cv2.COLOR_BGR2GRAY)
+        gray_float = gray_uint8.astype(np.float32)
+
+        # Flat-region ratio: fraction of adjacent pixel pairs with intensity diff < 5.
+        # Cartoons have large solid-fill areas → very high flat_ratio (~0.93).
+        # Real photos have skin-tone gradients → lower flat_ratio (~0.75).
+        FLAT_DIFF_THRESHOLD = 5
+        h_diff = np.abs(np.diff(gray_float, axis=1))
+        v_diff = np.abs(np.diff(gray_float, axis=0))
+        flat_ratio = float((np.mean(h_diff < FLAT_DIFF_THRESHOLD) + np.mean(v_diff < FLAT_DIFF_THRESHOLD)) / 2)
+
+        # Mean Sobel gradient magnitude.
+        # UI screenshots have many sharp hard edges → high mean_gradient (~107).
+        # Real photos and cartoons score much lower (~30-55).
+        sobelx = cv2.Sobel(gray_uint8, cv2.CV_32F, 1, 0, ksize=3)
+        sobely = cv2.Sobel(gray_uint8, cv2.CV_32F, 0, 1, ksize=3)
+        mean_gradient = float(np.mean(np.sqrt(sobelx**2 + sobely**2)))
+
+        # Saturation std-dev (soft gate signal 1)
         hsv = cv2.cvtColor(analysis_img, cv2.COLOR_BGR2HSV)
-        saturation_channel = hsv[:, :, 1].astype(np.float32)
-        sat_std = float(np.std(saturation_channel))
+        sat_std = float(np.std(hsv[:, :, 1].astype(np.float32)))
 
-        # Signal 2: Laplacian variance (texture / edge complexity)
-        gray = cv2.cvtColor(analysis_img, cv2.COLOR_BGR2GRAY)
-        laplacian_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        # Laplacian variance (soft gate signal 2)
+        laplacian_var = float(cv2.Laplacian(gray_uint8, cv2.CV_32F).var())
 
-        logger.debug(f"Image realism check — saturation_std: {sat_std:.2f}, laplacian_var: {laplacian_var:.2f}")
+        # Skin-tone ratio via YCrCb (soft gate signal 3)
+        ycrcb = cv2.cvtColor(analysis_img, cv2.COLOR_BGR2YCrCb)
+        skin_mask = cv2.inRange(
+            ycrcb,
+            np.array([0, 133, 77], dtype=np.uint8),
+            np.array([255, 173, 127], dtype=np.uint8),
+        )
+        skin_ratio = float(np.count_nonzero(skin_mask)) / total_pixels
 
-        # Both signals must indicate real photo; a cartoon typically fails both
-        if sat_std < MIN_SATURATION_STD and laplacian_var < MIN_LAPLACIAN_VAR:
+        logger.debug(
+            f"Realism check — flat_ratio={flat_ratio:.4f}, mean_gradient={mean_gradient:.2f}, "
+            f"sat_std={sat_std:.2f}, laplacian_var={laplacian_var:.2f}, skin_ratio={skin_ratio:.4f}"
+        )
+
+        # --- Hard veto 1: cartoon / flat-fill illustration ---
+        if flat_ratio > MAX_FLAT_RATIO:
+            logger.info(f"Image rejected (cartoon veto): flat_ratio={flat_ratio:.4f}")
+            return False
+
+        # --- Hard veto 2: UI screenshot / non-photo image ---
+        if mean_gradient > MAX_MEAN_GRADIENT:
+            logger.info(f"Image rejected (UI veto): mean_gradient={mean_gradient:.2f}")
+            return False
+
+        # --- Soft gate for remaining edge cases ---
+        cartoon_signals = 0
+        if sat_std < MIN_SATURATION_STD:
+            cartoon_signals += 1
+        if laplacian_var < MIN_LAPLACIAN_VAR:
+            cartoon_signals += 1
+        if skin_ratio < MIN_SKIN_RATIO:
+            cartoon_signals += 1
+
+        if cartoon_signals >= CARTOON_SIGNAL_THRESHOLD:
+            logger.info(f"Image rejected (soft gate): {cartoon_signals}/3 soft signals failed")
             return False
 
         return True
 
     except Exception as e:
-        logger.error(f"Error in animated face detection: {e}")
+        logger.error(f"Error in animated/cartoon face detection: {e}")
         return True  # Fail open on error
 
 
