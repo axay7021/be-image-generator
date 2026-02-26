@@ -580,7 +580,12 @@ async def modify_image(
                 f"so the integration looks photorealistic and seamless. Do not alter the subject's appearance."
             )
         elif action == "remove-object":
-            prompt = f"Identify and completely remove the {extra_context} from this image. Reconstruct the missing area by realistically extending the surrounding textures, patterns, and lighting. The final result must show no traces of the original object and should look like a clean, untouched photograph."
+            if not extra_context or not extra_context.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="'extra_context' is required for 'remove-object'. Please specify what object to remove (e.g. 'the red chair in the background').",
+                )
+            prompt = f"Identify and completely remove the {extra_context.strip()} from this image. Reconstruct the missing area by realistically extending the surrounding textures, patterns, and lighting. The final result must show no traces of the original object and should look like a clean, untouched photograph."
         elif action == "custom-edit":
             prompt = extra_context if extra_context else "Modify this image."
         elif action == "linkedin-profile":
