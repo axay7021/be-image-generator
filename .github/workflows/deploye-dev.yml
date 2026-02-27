@@ -27,4 +27,5 @@ jobs:
           source .venv/bin/activate
           pip install --upgrade pip
           pip install .
+          alembic upgrade head
           pm2 restart image-generator-dev
