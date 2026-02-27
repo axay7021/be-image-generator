@@ -238,17 +238,55 @@ def process_gemini_image(input_image_bytes, prompt):
             if part.inline_data:
                 return part.inline_data.data, cost_info, None
 
-    # Analyze failure reason
-    failure_detail = "Failed to process image"
+    # Map Gemini finish reasons to user-friendly messages.
+    # These are policy/safety refusals — expose a clear message without leaking internals.
+    FINISH_REASON_MESSAGES = {
+        "NO_IMAGE": (
+            "The image could not be processed due to content policy restrictions. "
+            "Please try a different image or adjust your request."
+        ),
+        "SAFETY": (
+            "Your request was blocked by content safety filters. "
+            "Please ensure the image and instructions do not contain restricted content."
+        ),
+        "RECITATION": (
+            "The request was rejected to prevent reproduction of restricted content. "
+            "Please modify your instructions and try again."
+        ),
+        "OTHER": ("The image generation was declined. Please try a different image or simplify your request."),
+        "MAX_TOKENS": ("The request was too complex to process. Please simplify your instructions and try again."),
+        "BLOCKLIST": (
+            "Your request contains terms that are not permitted. Please revise your instructions and try again."
+        ),
+        "PROHIBITED_CONTENT": (
+            "The request contains prohibited content and cannot be processed. "
+            "Please use an appropriate image and instructions."
+        ),
+        "SPII": (
+            "The request was blocked because it may contain sensitive personal information. "
+            "Please remove any personal identifiers from your instructions."
+        ),
+    }
+
+    finish_reason_str = None
+    is_policy_violation = False
+
     if response.candidates:
         candidate = response.candidates[0]
         if candidate.finish_reason:
-            reason_str = f"{candidate.finish_reason}"
-            failure_detail += f" (Reason: {reason_str})"
-            logger.warning(f"Gemini Refusal: {failure_detail}")
+            # FinishReason enum → strip prefix, e.g. "FinishReason.NO_IMAGE" → "NO_IMAGE"
+            raw = f"{candidate.finish_reason}"
+            finish_reason_str = raw.split(".")[-1] if "." in raw else raw
+            is_policy_violation = finish_reason_str in FINISH_REASON_MESSAGES
+            logger.warning(f"Gemini Refusal: finish_reason={finish_reason_str}")
 
     logger.error(f"No image found in response. Full Response: {response}")
-    return None, cost_info, failure_detail
+
+    user_message = FINISH_REASON_MESSAGES.get(
+        finish_reason_str,
+        "Failed to process image. Please try again with a different image.",
+    )
+    return None, cost_info, {"user_message": user_message, "is_policy_violation": is_policy_violation}
 
 
 @router.post("/validate-image")
@@ -256,6 +294,8 @@ async def validate_image(file: UploadFile = File(...)):
     try:
         image_bytes = await file.read()
         face_count = detect_face_mediapipe(image_bytes)
+
+        logger.info(f"Face count: {face_count}")
 
         if face_count == 0:
             return {
@@ -270,6 +310,9 @@ async def validate_image(file: UploadFile = File(...)):
                 "message": "Multiple faces detected. Please upload a photo with only one face.",
                 "debug_count": face_count,
             }
+
+        logger.info("Real face detected")
+        logger.info(is_real_human_face(image_bytes))
 
         if not is_real_human_face(image_bytes):
             return {
@@ -406,43 +449,32 @@ async def modify_image(
     quota_remaining: int = Depends(check_quota),  # Check quota first
 ):
     try:
-        # # Validate Input Lengths
-        # def validate_length(name, value):
-        #     if value and len(str(value)) > settings.MAX_TEXT_INPUT_LENGTH:
-        #         raise HTTPException(
-        #             status_code=status.HTTP_400_BAD_REQUEST,
-        #             detail=f"Input '{name}' exceeds maximum length of {settings.MAX_TEXT_INPUT_LENGTH} characters.",
-        #         )
-
-        # validate_length("extra_context", extra_context)
-        # validate_length("passport_mode", passport_mode)
-        # validate_length("suit_color", suit_color)
-        # validate_length("tie_color", tie_color)
-        # validate_length("style", style)
-        # validate_length("category", category)
-
         image_bytes = await file.read()
 
-        # Local Face Detection — reject missing, multiple faces, and animated images
-        face_count = detect_face_mediapipe(image_bytes)
+        # Face validation is only required for actions that specifically modify a person's portrait.
+        # Actions like remove-object, remove-bg, change-bg, and custom-edit work on general images.
+        FACE_REQUIRED_ACTIONS = {"passport-size", "linkedin-profile"}
 
-        if face_count == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No human face detected. Please upload a photo with a visible face.",
-            )
+        if action in FACE_REQUIRED_ACTIONS:
+            face_count = detect_face_mediapipe(image_bytes)
 
-        if face_count > 1:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Multiple faces detected. Only one face is allowed per image.",
-            )
+            if face_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No human face detected. Please upload a photo with a visible face.",
+                )
 
-        if not is_real_human_face(image_bytes):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Animated or illustrated images are not supported. Please upload a real photograph.",
-            )
+            if face_count > 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Multiple faces detected. Only one face is allowed per image.",
+                )
+
+            if not is_real_human_face(image_bytes):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Animated or illustrated images are not supported. Please upload a real photograph.",
+                )
 
         # Prompt construction (Simplified from POC for brevity, ideally share logic)
         # Using POC logic copy-paste where possible
@@ -750,8 +782,10 @@ async def modify_image(
             return response
 
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg or "Failed to process image (no output from model)",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
+            if error_msg and error_msg.get("is_policy_violation")
+            else status.HTTP_400_BAD_REQUEST,
+            detail=error_msg["user_message"] if error_msg else "Failed to process image (no output from model)",
         )
     except HTTPException:
         raise

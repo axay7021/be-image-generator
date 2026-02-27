@@ -1,0 +1,2008 @@
+{
+    "info": {
+        "name": "Image Modifier API",
+        "description": "Complete Postman Collection for the Softcolon Image Modifier backend API.\n\nBase URL: {{base_url}}/api/v1\n\n**Auth Types:**\n- Admin endpoints: Bearer JWT (from /admin/auth/login)\n- User endpoints: Bearer Clerk Token\n- Public endpoints: No auth required",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "version": "1.0.0"
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8000",
+            "type": "string",
+            "description": "Base URL of the server. Change for production."
+        },
+        {
+            "key": "admin_token",
+            "value": "",
+            "type": "string",
+            "description": "JWT access token for admin endpoints. Set after login."
+        },
+        {
+            "key": "admin_refresh_token",
+            "value": "",
+            "type": "string",
+            "description": "JWT refresh token for admin endpoints."
+        },
+        {
+            "key": "user_clerk_token",
+            "value": "",
+            "type": "string",
+            "description": "Clerk JWT token for user-facing authenticated endpoints."
+        },
+        {
+            "key": "plan_id",
+            "value": "",
+            "type": "string",
+            "description": "A plan UUID for subscription/plan endpoints."
+        },
+        {
+            "key": "user_id",
+            "value": "",
+            "type": "string",
+            "description": "A user UUID for admin user management endpoints."
+        },
+        {
+            "key": "session_id",
+            "value": "",
+            "type": "string",
+            "description": "A session UUID for session management endpoints."
+        },
+        {
+            "key": "transaction_id",
+            "value": "",
+            "type": "string",
+            "description": "A transaction UUID for reconciliation endpoints."
+        }
+    ],
+    "item": [
+        {
+            "name": "Authentication (Admin)",
+            "description": "Admin authentication: login, token refresh, logout, profile, password reset, and session management.",
+            "item": [
+                {
+                    "name": "Login",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/auth/login",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"securepassword\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Authenticate admin user with email and password. Returns access_token and refresh_token."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Refresh Token",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}",
+                                "description": "Current access token (will be invalidated)"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/auth/refresh",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "auth",
+                                "refresh"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"refresh_token\": \"{{admin_refresh_token}}\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Refresh the admin access token using a valid refresh token."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Logout",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/auth/logout",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "auth",
+                                "logout"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"refresh_token\": \"{{admin_refresh_token}}\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Logout admin and revoke all tokens for this session."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Current Admin",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/auth/me",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "auth",
+                                "me"
+                            ]
+                        },
+                        "description": "Get the currently authenticated admin's profile information."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Request Password Reset (OTP)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/auth/password-reset/request",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "auth",
+                                "password-reset",
+                                "request"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"admin@example.com\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Send an OTP to the admin email to initiate a password reset."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Verify Password Reset OTP",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/auth/password-reset/verify",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "auth",
+                                "password-reset",
+                                "verify"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"admin@example.com\",\n  \"otp\": \"123456\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Verify the 6-digit OTP code sent to the admin email."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Reset Password",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/auth/password-reset/reset",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "auth",
+                                "password-reset",
+                                "reset"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"admin@example.com\",\n  \"otp\": \"123456\",\n  \"new_password\": \"newSecurePassword123\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Reset the admin password using a verified OTP code."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Active Sessions",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/auth/sessions",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "auth",
+                                "sessions"
+                            ]
+                        },
+                        "description": "Get all active sessions for the currently authenticated admin."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Revoke Session",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/auth/sessions/{{session_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "auth",
+                                "sessions",
+                                "{{session_id}}"
+                            ]
+                        },
+                        "description": "Revoke a specific session by its ID."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Revoke All Sessions",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/auth/sessions/all",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "auth",
+                                "sessions",
+                                "all"
+                            ]
+                        },
+                        "description": "Revoke all sessions except the current one."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Login History",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/auth/login-history?limit=50&offset=0",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "auth",
+                                "login-history"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "50",
+                                    "description": "Max records to return (default: 50)"
+                                },
+                                {
+                                    "key": "offset",
+                                    "value": "0",
+                                    "description": "Number of records to skip (default: 0)"
+                                }
+                            ]
+                        },
+                        "description": "Get paginated login history for the current admin."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "User Authentication",
+            "description": "User-facing authentication endpoints using Clerk tokens.",
+            "item": [
+                {
+                    "name": "Get Current User",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}",
+                                "description": "Clerk JWT token"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/user/auth/me",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "user",
+                                "auth",
+                                "me"
+                            ]
+                        },
+                        "description": "Get the currently authenticated user's profile information. Requires a valid Clerk Bearer token."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Image Modification",
+            "description": "Public/user endpoints for image processing — validate, modify, and upscale images.",
+            "item": [
+                {
+                    "name": "Validate Image",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/validate-image",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "validate-image"
+                            ]
+                        },
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "",
+                                    "description": "Image file to validate (JPEG/PNG). Must contain exactly one real human face."
+                                }
+                            ]
+                        },
+                        "description": "Validate an uploaded image for face detection. Checks for exactly one real human face. No authentication required."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Upscale Image",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}",
+                                "description": "Required for 2K/4K upscaling. Optional for Original."
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/upscale",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "upscale"
+                            ]
+                        },
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "",
+                                    "description": "Image file to upscale (JPEG/PNG)"
+                                },
+                                {
+                                    "key": "target_resolution",
+                                    "value": "2K",
+                                    "type": "text",
+                                    "description": "Target resolution: 'Original' (free), '2K' (paid), or '4K' (paid)"
+                                },
+                                {
+                                    "key": "target_width",
+                                    "value": "",
+                                    "type": "text",
+                                    "description": "Alternative: target width in pixels — '2560' for 2K, '3840' for 4K, 'original' for no change. Use either target_resolution OR target_width.",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Upscale an image to Original, 2K (2560px), or 4K (3840px) resolution. 2K and 4K require an active user subscription. Returns a PNG image."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Modify Image - Remove Background",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}",
+                                "description": "Optional. Required to avoid anonymous quota limits."
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/modify-image/remove-bg",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "modify-image",
+                                "remove-bg"
+                            ]
+                        },
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "",
+                                    "description": "Image file with a single human face (JPEG/PNG)"
+                                },
+                                {
+                                    "key": "extra_context",
+                                    "value": "",
+                                    "type": "text",
+                                    "description": "Optional: Additional instructions for background removal",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Remove background from the image, keeping only the main subject (face). Action: remove-bg."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Modify Image - Passport Size (Standard)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}",
+                                "description": "Optional."
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/modify-image/passport-size",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "modify-image",
+                                "passport-size"
+                            ]
+                        },
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "",
+                                    "description": "Portrait image file (JPEG/PNG)"
+                                },
+                                {
+                                    "key": "passport_mode",
+                                    "value": "standard",
+                                    "type": "text",
+                                    "description": "Passport mode: 'standard' (default), 'suit', or 'custom'"
+                                },
+                                {
+                                    "key": "extra_context",
+                                    "value": "",
+                                    "type": "text",
+                                    "description": "Optional extra instructions (used when passport_mode=custom)",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Convert image to a professional passport photo (standard mode — quality enhancement and pose correction)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Modify Image - Passport Size (Suit Mode)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}",
+                                "description": "Optional."
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/modify-image/passport-size",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "modify-image",
+                                "passport-size"
+                            ]
+                        },
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "",
+                                    "description": "Portrait image file (JPEG/PNG)"
+                                },
+                                {
+                                    "key": "passport_mode",
+                                    "value": "suit",
+                                    "type": "text",
+                                    "description": "suit — dress the person in a formal suit"
+                                },
+                                {
+                                    "key": "suit_color",
+                                    "value": "navy blue",
+                                    "type": "text",
+                                    "description": "Color of the suit (e.g. 'navy blue', 'black', 'charcoal')"
+                                },
+                                {
+                                    "key": "tie_color",
+                                    "value": "burgundy",
+                                    "type": "text",
+                                    "description": "Color of the tie (e.g. 'burgundy', 'red', 'blue')"
+                                }
+                            ]
+                        },
+                        "description": "Convert image to passport photo with a formal suit outfit applied."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Modify Image - Passport Size (Custom Mode)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}",
+                                "description": "Optional."
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/modify-image/passport-size",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "modify-image",
+                                "passport-size"
+                            ]
+                        },
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "",
+                                    "description": "Portrait image file (JPEG/PNG)"
+                                },
+                                {
+                                    "key": "passport_mode",
+                                    "value": "custom",
+                                    "type": "text",
+                                    "description": "custom — apply extra_context instructions"
+                                },
+                                {
+                                    "key": "extra_context",
+                                    "value": "Apply traditional Indian attire with white background",
+                                    "type": "text",
+                                    "description": "Custom instructions applied to the passport photo"
+                                }
+                            ]
+                        },
+                        "description": "Convert image to passport photo with custom user-specified styling instructions."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Modify Image - Change Background",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}",
+                                "description": "Optional."
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/modify-image/change-bg",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "modify-image",
+                                "change-bg"
+                            ]
+                        },
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "",
+                                    "description": "Image file (JPEG/PNG)"
+                                },
+                                {
+                                    "key": "category",
+                                    "value": "white",
+                                    "type": "text",
+                                    "description": "Background style. Options: white, black, grey, warm_grey, cool_grey, blue, gradient_blue, gradient_grey, plain, studio, custom"
+                                },
+                                {
+                                    "key": "extra_context",
+                                    "value": "",
+                                    "type": "text",
+                                    "description": "Custom background description (used when category=custom or omitted)",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Replace image background with a preset or custom background. Style options: white, black, grey, warm_grey, cool_grey, blue, gradient_blue, gradient_grey, plain, studio."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Modify Image - Remove Object",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}",
+                                "description": "Optional."
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/modify-image/remove-object",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "modify-image",
+                                "remove-object"
+                            ]
+                        },
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "",
+                                    "description": "Image file (JPEG/PNG)"
+                                },
+                                {
+                                    "key": "extra_context",
+                                    "value": "glasses",
+                                    "type": "text",
+                                    "description": "Description of what to remove (e.g., 'glasses', 'hat', 'earrings')"
+                                }
+                            ]
+                        },
+                        "description": "Remove a specific object from the image and reconstruct the area."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Modify Image - Custom Edit",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}",
+                                "description": "Optional."
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/modify-image/custom-edit",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "modify-image",
+                                "custom-edit"
+                            ]
+                        },
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "",
+                                    "description": "Image file (JPEG/PNG)"
+                                },
+                                {
+                                    "key": "extra_context",
+                                    "value": "Add a professional office background and enhance the lighting",
+                                    "type": "text",
+                                    "description": "Detailed instructions for the custom edit to apply"
+                                }
+                            ]
+                        },
+                        "description": "Apply a completely custom AI modification based on user-provided text instructions."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Modify Image - LinkedIn Profile (Classic Corporate)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}",
+                                "description": "Optional."
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/modify-image/linkedin-profile",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "modify-image",
+                                "linkedin-profile"
+                            ]
+                        },
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "",
+                                    "description": "Portrait image file (JPEG/PNG)"
+                                },
+                                {
+                                    "key": "style",
+                                    "value": "classic_corporate",
+                                    "type": "text",
+                                    "description": "LinkedIn style. Options: classic_corporate, casual_professional, creative, founder_leader, friendly_approachable, monochrome_bw, studio_look, outdoor_natural, tech_modern"
+                                },
+                                {
+                                    "key": "extra_context",
+                                    "value": "",
+                                    "type": "text",
+                                    "description": "Optional additional styling requirements",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Generate a hyper-realistic LinkedIn headshot. Available styles: classic_corporate, casual_professional, creative, founder_leader, friendly_approachable, monochrome_bw, studio_look, outdoor_natural, tech_modern."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Subscriptions",
+            "description": "Subscription management for users and admins (Stripe-based).",
+            "item": [
+                {
+                    "name": "List Plans (Public)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/plans",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "plans"
+                            ]
+                        },
+                        "description": "Get a list of all active subscription plans. Public endpoint, no authentication required."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Create Plan (Admin)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/plans",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "plans"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Pro Monthly\",\n  \"price_usd\": 9.99,\n  \"image_quota\": 100,\n  \"stripe_price_id\": \"price_xxxxxxxxxxxxx\",\n  \"razorpay_plan_id\": null,\n  \"razorpay_payment_page_id\": null,\n  \"billing_interval\": \"monthly\",\n  \"validity_days\": 30\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Admin endpoint to create a new subscription plan."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Request Checkout (User)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/checkout/{{plan_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "checkout",
+                                "{{plan_id}}"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Request a plan subscription. Currently sales-managed — no direct payment. Returns a contact-sales message."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get My Subscription",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/my-subscription",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "my-subscription"
+                            ]
+                        },
+                        "description": "Get the current user's active subscription with aggregated quota information."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get My Subscription History",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/my-subscription-history",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "my-subscription-history"
+                            ]
+                        },
+                        "description": "Get the full subscription history (all plans, all statuses) for the current user."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Stripe Webhook (Internal)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "stripe-signature",
+                                "value": "t=...,v1=...",
+                                "description": "Stripe webhook signature — generated by Stripe, not manually set."
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/stripe/webhook",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "stripe",
+                                "webhook"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"type\": \"checkout.session.completed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"cs_test_xxx\",\n      \"client_reference_id\": \"<user_uuid>\",\n      \"metadata\": {\n        \"plan_id\": \"<plan_uuid>\",\n        \"user_id\": \"<user_uuid>\"\n      },\n      \"subscription\": null,\n      \"payment_intent\": \"pi_xxx\",\n      \"amount_total\": 999,\n      \"currency\": \"usd\"\n    }\n  }\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "⚠️ Internal webhook endpoint called by Stripe. Do not call manually in production. Handles: checkout.session.completed, payment_intent.succeeded, invoice.payment_succeeded, customer.subscription.deleted."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Razorpay",
+            "description": "Razorpay payment integration endpoints.",
+            "item": [
+                {
+                    "name": "Request Razorpay Checkout",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{user_clerk_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/razorpay/checkout/{{plan_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "razorpay",
+                                "checkout",
+                                "{{plan_id}}"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Request a Razorpay plan subscription. Currently sales-managed. Returns a contact-sales message."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Razorpay Webhook (Internal)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "x-razorpay-signature",
+                                "value": "<hmac_sha256_signature>",
+                                "description": "HMAC-SHA256 signature of the request body using the Razorpay webhook secret. Generated by Razorpay."
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/razorpay/webhook",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "razorpay",
+                                "webhook"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"event\": \"payment.captured\",\n  \"payload\": {\n    \"payment\": {\n      \"entity\": {\n        \"id\": \"pay_xxxxxxxxxxxx\",\n        \"amount\": 99900,\n        \"currency\": \"INR\",\n        \"email\": \"user@example.com\",\n        \"contact\": \"+919999999999\",\n        \"method\": \"upi\",\n        \"notes\": {\n          \"user_id\": \"<user_uuid>\",\n          \"plan_id\": \"<plan_uuid>\"\n        }\n      }\n    }\n  }\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "⚠️ Internal webhook called by Razorpay. Do not call manually in production. Handles: payment.captured, subscription.charged."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Admin - User Management",
+            "description": "Admin endpoints to list, view, update, and manage users and their plans.",
+            "item": [
+                {
+                    "name": "List Users",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/users/?skip=0&limit=50",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "users",
+                                ""
+                            ],
+                            "query": [
+                                {
+                                    "key": "search",
+                                    "value": "",
+                                    "description": "Search by email, phone, or name",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "is_active",
+                                    "value": "true",
+                                    "description": "Filter by active status (true/false)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "created_via",
+                                    "value": "",
+                                    "description": "Filter by registration source (e.g., 'clerk')",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "has_active_subscription",
+                                    "value": "true",
+                                    "description": "Filter by subscription status (true/false)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "skip",
+                                    "value": "0",
+                                    "description": "Number of records to skip (default: 0)"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "50",
+                                    "description": "Max records to return. Min: 1, Max: 100 (default: 50)"
+                                }
+                            ]
+                        },
+                        "description": "Get a paginated and filtered list of all users. Rate limited to 30 requests/minute."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get User Detail",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "users",
+                                "{{user_id}}"
+                            ]
+                        },
+                        "description": "Get detailed information about a specific user, including subscriptions, transaction count, and quota summary."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update User Status",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}/status",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "users",
+                                "{{user_id}}",
+                                "status"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"is_active\": false,\n  \"reason\": \"Violating terms of service\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Block or unblock a user. Set is_active to false to block, true to unblock. Logs the action with an optional reason."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get User Activity",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}/activity?skip=0&limit=50",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "users",
+                                "{{user_id}}",
+                                "activity"
+                            ],
+                            "query": [
+                                {
+                                    "key": "skip",
+                                    "value": "0",
+                                    "description": "Number of records to skip (default: 0)"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "50",
+                                    "description": "Max records to return. Min: 1, Max: 100 (default: 50)"
+                                }
+                            ]
+                        },
+                        "description": "Get paginated image generation activity logs (ImageLog entries) for a specific user."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get User Transactions",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}/transactions?skip=0&limit=50",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "users",
+                                "{{user_id}}",
+                                "transactions"
+                            ],
+                            "query": [
+                                {
+                                    "key": "skip",
+                                    "value": "0",
+                                    "description": "Number of records to skip (default: 0)"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "50",
+                                    "description": "Max records to return. Min: 1, Max: 100 (default: 50)"
+                                }
+                            ]
+                        },
+                        "description": "Get paginated transaction history (payments) for a specific user."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Assign Plan to User",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}/assign-plan/{{plan_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "users",
+                                "{{user_id}}",
+                                "assign-plan",
+                                "{{plan_id}}"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Manually assign a subscription plan to a user (admin action, no payment required). Cancels any existing active subscription first."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Admin - Plan Management",
+            "description": "Admin CRUD endpoints for managing subscription plans.",
+            "item": [
+                {
+                    "name": "Create Plan",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/plans/create",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "plans",
+                                "create"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Pro Monthly\",\n  \"price_usd\": 9.99,\n  \"image_quota\": 100,\n  \"validity_days\": 30,\n  \"billing_interval\": \"monthly\",\n  \"is_popular\": true\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Create a new subscription plan. If billing_interval ('monthly' or 'yearly') is provided, creates a Razorpay recurring plan. Leave billing_interval null for one-time payment plans."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List Plans (Admin)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/plans?include_inactive=false",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "plans"
+                            ],
+                            "query": [
+                                {
+                                    "key": "include_inactive",
+                                    "value": "false",
+                                    "description": "Include inactive/deleted plans (true/false, default: false)"
+                                }
+                            ]
+                        },
+                        "description": "Get all subscription plans. Admin-only. Optionally include inactive/soft-deleted plans."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Plan Details",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/plans/{{plan_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "plans",
+                                "{{plan_id}}"
+                            ]
+                        },
+                        "description": "Get details of a specific plan by ID."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Plan",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/plans/{{plan_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "plans",
+                                "{{plan_id}}"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Pro Monthly (Updated)\",\n  \"price_usd\": 12.99,\n  \"image_quota\": 150,\n  \"validity_days\": 30,\n  \"is_active\": true,\n  \"is_popular\": false\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Update plan details. All fields are optional (partial update). Cannot modify billing_interval or Razorpay plan after creation."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Delete Plan (Soft Delete)",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/plans/{{plan_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "plans",
+                                "{{plan_id}}"
+                            ]
+                        },
+                        "description": "Soft-delete a plan by setting is_active to false. Cannot delete plans that have active subscriptions."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Plan Statistics",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/plans/{{plan_id}}/stats",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "plans",
+                                "{{plan_id}}",
+                                "stats"
+                            ]
+                        },
+                        "description": "Get subscription statistics for a specific plan (active, canceled, expired, quota-exhausted counts)."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Admin - Analytics",
+            "description": "Admin analytics dashboard endpoints.",
+            "item": [
+                {
+                    "name": "Dashboard Overview",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/analytics/overview",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "analytics",
+                                "overview"
+                            ]
+                        },
+                        "description": "Get quick overview stats for the admin dashboard (total users, revenue, active subscriptions, etc.)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Sales Analytics",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/analytics/sales?start_date=2025-01-01&end_date=2025-12-31&period=monthly",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "analytics",
+                                "sales"
+                            ],
+                            "query": [
+                                {
+                                    "key": "start_date",
+                                    "value": "2025-01-01",
+                                    "description": "Start date (YYYY-MM-DD) — required"
+                                },
+                                {
+                                    "key": "end_date",
+                                    "value": "2025-12-31",
+                                    "description": "End date (YYYY-MM-DD) — required"
+                                },
+                                {
+                                    "key": "period",
+                                    "value": "monthly",
+                                    "description": "Aggregation period: 'daily', 'weekly', or 'monthly' (default: daily)"
+                                }
+                            ]
+                        },
+                        "description": "Get time-series sales analytics with revenue breakdown by payment provider."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Traffic Analytics",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/analytics/traffic?start_date=2025-01-01&end_date=2025-12-31&period=daily",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "analytics",
+                                "traffic"
+                            ],
+                            "query": [
+                                {
+                                    "key": "start_date",
+                                    "value": "2025-01-01",
+                                    "description": "Start date (YYYY-MM-DD) — required"
+                                },
+                                {
+                                    "key": "end_date",
+                                    "value": "2025-12-31",
+                                    "description": "End date (YYYY-MM-DD) — required"
+                                },
+                                {
+                                    "key": "period",
+                                    "value": "daily",
+                                    "description": "Aggregation period: 'daily', 'weekly', or 'monthly' (default: daily)"
+                                }
+                            ]
+                        },
+                        "description": "Get time-series user registration and active user analytics."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Plan Analytics",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/analytics/plans?start_date=2025-01-01&end_date=2025-12-31",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "analytics",
+                                "plans"
+                            ],
+                            "query": [
+                                {
+                                    "key": "start_date",
+                                    "value": "2025-01-01",
+                                    "description": "Start date (YYYY-MM-DD) — required"
+                                },
+                                {
+                                    "key": "end_date",
+                                    "value": "2025-12-31",
+                                    "description": "End date (YYYY-MM-DD) — required"
+                                }
+                            ]
+                        },
+                        "description": "Get per-plan analytics: subscription counts, revenue, active users, and churn rates."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Admin - Reconciliation",
+            "description": "Payment reconciliation endpoints for syncing transactions with Razorpay/Stripe.",
+            "item": [
+                {
+                    "name": "Sync Payments",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/reconciliation/sync",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "reconciliation",
+                                "sync"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"provider\": \"razorpay\",\n  \"from_date\": \"2025-01-01\",\n  \"to_date\": \"2025-01-31\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Sync transactions with payment provider API for a given date range. Provider options: 'razorpay' (Stripe not yet implemented). Rate limited to 5 requests/minute due to external API calls."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Discrepancies",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/reconciliation/discrepancies",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "reconciliation",
+                                "discrepancies"
+                            ]
+                        },
+                        "description": "Get all transactions with reconciliation discrepancies (unmatched status). These require manual review."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Manual Reconcile Transaction",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{admin_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/admin/reconciliation/{{transaction_id}}/manual-reconcile?notes=Verified+manually+by+admin",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "admin",
+                                "reconciliation",
+                                "{{transaction_id}}",
+                                "manual-reconcile"
+                            ],
+                            "query": [
+                                {
+                                    "key": "notes",
+                                    "value": "Verified manually by admin",
+                                    "description": "Optional note explaining the manual reconciliation"
+                                }
+                            ]
+                        },
+                        "description": "Manually mark a transaction as reconciled. Use for transactions that cannot be auto-reconciled but have been verified. Sets reconciliation_status to 'manual'."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Webhooks",
+            "description": "External webhook endpoints (Clerk user sync).",
+            "item": [
+                {
+                    "name": "Clerk Webhook (Internal)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "svix-id",
+                                "value": "msg_xxxxxxxxxxxx",
+                                "description": "Svix message ID — provided by Clerk/Svix"
+                            },
+                            {
+                                "key": "svix-timestamp",
+                                "value": "1234567890",
+                                "description": "Unix timestamp — provided by Clerk/Svix"
+                            },
+                            {
+                                "key": "svix-signature",
+                                "value": "v1,xxxxxxxxxxxx",
+                                "description": "HMAC-SHA256 signature — provided by Clerk/Svix"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/webhooks/clerk",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "webhooks",
+                                "clerk"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"type\": \"user.created\",\n  \"data\": {\n    \"id\": \"user_xxxxxxxxxxxxx\",\n    \"email_addresses\": [\n      {\n        \"id\": \"idn_xxxxx\",\n        \"email_address\": \"user@example.com\"\n      }\n    ],\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"phone_numbers\": []\n  }\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "⚠️ Internal webhook endpoint called by Clerk (via Svix). Do not call manually in production. Handles user.created, user.updated, user.deleted events to sync user data with local DB."
+                    },
+                    "response": []
+                }
+            ]
+        }
+    ]
+}
