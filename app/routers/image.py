@@ -38,7 +38,7 @@ try:
         model="",  # Empty string uses the built-in model
         config="",
         input_size=(320, 320),
-        score_threshold=0.6,
+        score_threshold=0.85,
         nms_threshold=0.3,
         top_k=5000,
     )
@@ -76,7 +76,9 @@ def detect_face_mediapipe(image_bytes):
         # Fallback to Haar Cascade
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        # Use minSize=(100, 100) on a max 1024px image to ensure we capture the prominent subject
+        # and ignore smaller background faces or false positives in complex textures.
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=8, minSize=(100, 100))
 
         return len(faces)
 
