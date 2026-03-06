@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logger import logger
 from app.db.schema import (
     CreatedVia,
+    Plan,
+    Subscription,
     User,
 )
 
@@ -39,7 +43,7 @@ async def get_user_by_clerk_id(clerk_id: str, db: AsyncSession) -> User | None:
 # ============================================
 
 
-async def create_or_update_from_clerk_payload(
+async def create_or_update_from_clerk_payload(  # noqa: PLR0915
     payload: dict,
     email: str | None,
     db: AsyncSession,
@@ -123,6 +127,29 @@ async def create_or_update_from_clerk_payload(
         try:
             await db.commit()
             await db.refresh(new_user)
+
+            # Assign default 'Basic' subscription
+            plan_query = select(Plan).where(Plan.name == "Basic")
+            plan_result = await db.execute(plan_query)
+            basic_plan = plan_result.scalar_one_or_none()
+
+            if basic_plan:
+                now = datetime.now(timezone.utc)
+                period_end = now + timedelta(days=basic_plan.validity_days)
+                new_subscription = Subscription(
+                    user_id=new_user.id,
+                    plan_id=basic_plan.id,
+                    payment_provider="system_default",
+                    status="active",
+                    quota_used=0,
+                    period_start=now,
+                    period_end=period_end,
+                    image_generation_limit=basic_plan.image_quota,
+                )
+                db.add(new_subscription)
+                await db.commit()
+                logger.info(f"Assigned default Basic plan to new user {new_user.id}")
+
             return new_user
         except IntegrityError:
             await db.rollback()

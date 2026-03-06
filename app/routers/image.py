@@ -746,6 +746,9 @@ async def modify_image(
             "If any such elements are detected in the source, they must be seamlessly removed."
         )
 
+        print(prompt)
+        print("default prompt")
+
         modified_image_data, cost_info, error_msg = process_gemini_image(image_bytes, prompt)
 
         if modified_image_data:

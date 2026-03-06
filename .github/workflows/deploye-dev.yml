@@ -28,4 +28,5 @@ jobs:
           pip install --upgrade pip
           pip install .
           alembic upgrade head
+          python scripts/seed_prod.py --env .env
           pm2 restart image-generator-dev
