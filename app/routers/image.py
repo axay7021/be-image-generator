@@ -97,11 +97,11 @@ def is_real_human_face(image_bytes: bytes) -> bool:
     Signal              | Cartoon | Mobile UI | Real Photo
     --------------------|---------|-----------|------------
     flat_ratio (< 5px)  | 0.934   | 0.756     | ~0.75-0.80
-    mean_gradient       | 42.5    | 107.5     | ~30-55
+    mean_gradient       | 42.5    | 107.5     | ~30-120 (can be high on sharp outdoor photos)
 
     Strategy:
     - Cartoon veto:     flat_ratio > 0.90  (cartoon=0.93 vs real~0.75 — clear gap)
-    - UI veto:          mean_gradient > 80  (UI=107 vs real~35-55 — clear gap)
+    - UI veto:          mean_gradient > 120 and low skin ratio (to avoid real-photo false positives)
     - Soft gate:        2+ of (low saturation, low laplacian, low skin) for remaining cases
 
     Returns True if image appears to be a real photograph, False otherwise.
@@ -109,7 +109,7 @@ def is_real_human_face(image_bytes: bytes) -> bool:
     """
     # Hard-veto thresholds (each strong enough to reject a specific class alone)
     MAX_FLAT_RATIO = 0.90  # Cartoon veto: >90% adjacent pixels identical → solid fills
-    MAX_MEAN_GRADIENT = 80.0  # UI/screenshot veto: sharp hard edges throughout image
+    MAX_MEAN_GRADIENT = 120.0  # UI/screenshot veto: allow sharp real photos; block very edge-heavy UI-like images
 
     # Soft-gate thresholds (multi-signal scoring for remaining edge cases)
     MIN_SATURATION_STD = 22.0
@@ -173,8 +173,10 @@ def is_real_human_face(image_bytes: bytes) -> bool:
             return False
 
         # --- Hard veto 2: UI screenshot / non-photo image ---
-        if mean_gradient > MAX_MEAN_GRADIENT:
-            logger.info(f"Image rejected (UI veto): mean_gradient={mean_gradient:.2f}")
+        # Only veto high-gradient images when skin evidence is also low.
+        # This avoids rejecting sharp real-world photos (foliage, textured backgrounds, etc.).
+        if mean_gradient > MAX_MEAN_GRADIENT and skin_ratio < MIN_SKIN_RATIO:
+            logger.info(f"Image rejected (UI veto): mean_gradient={mean_gradient:.2f}, skin_ratio={skin_ratio:.4f}")
             return False
 
         # --- Soft gate for remaining edge cases ---
@@ -314,9 +316,10 @@ async def validate_image(file: UploadFile = File(...)):
             }
 
         logger.info("Real face detected")
-        logger.info(is_real_human_face(image_bytes))
+        is_real_photo = is_real_human_face(image_bytes)
+        logger.info(f"Realism classifier result: {is_real_photo}")
 
-        if not is_real_human_face(image_bytes):
+        if not is_real_photo:
             return {
                 "valid": False,
                 "message": "Animated or illustrated images are not supported. Please upload a real photograph.",
