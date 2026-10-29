@@ -1,0 +1,47 @@
+# Free Postgres expires after 30 days. Not suitable for ongoing production storage.
+services:
+  - type: web
+    name: ai-image-generator-api
+    runtime: docker
+    repo: https://github.com/axay7021/be-image-generator
+    branch: main
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DEBUG
+        value: "false"
+      - key: ENVIRONMENT
+        value: production
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-image-generator-db
+          property: connectionString
+      - key: GEMINI_API_KEY
+        value: ""
+      - key: CLERK_SECRET_KEY
+        value: ""
+      - key: CLERK_WEBHOOK_SECRET
+        value: ""
+      - key: CLERK_JWKS_URL
+        value: ""
+      - key: FRONTEND_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_JWT_SECRET
+        generateValue: true
+      - key: ADMIN_JWT_SECRET_REF
+        generateValue: true
+      - key: USER_JWT_SECRET
+        generateValue: true
+      - key: USER_JWT_SECRET_REF
+        generateValue: true
+databases:
+  - name: ai-image-generator-db
+    region: oregon
+    plan: free
+    databaseName: image_generator
+    ipAllowList: []

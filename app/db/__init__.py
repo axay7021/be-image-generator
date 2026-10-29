@@ -17,7 +17,7 @@ class Base(DeclarativeBase):
 
 
 engine: AsyncEngine = create_async_engine(
-    settings.DATABASE_URL.replace("postgresql", "postgresql+asyncpg", 1),
+    (settings.DATABASE_URL or "postgresql://localhost/unconfigured").replace("postgresql", "postgresql+asyncpg", 1),
     pool_size=10,
     max_overflow=20,
     pool_timeout=30,

@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
@@ -62,7 +63,7 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[settings.FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -71,6 +72,10 @@ app.add_middleware(
 
 @app.middleware("http")
 async def register_request_logger(request: Request, call_next):
+    if request.url.path.startswith('/api/v1/modify-image') and not settings.GEMINI_API_KEY:
+        return JSONResponse(status_code=503, content={"code": "AI_NOT_CONFIGURED", "message": "Image generation is not configured yet. The owner must add the Gemini key."})
+    if request.url.path.startswith('/api/') and not settings.DATABASE_URL:
+        return JSONResponse(status_code=503, content={"code": "DATABASE_NOT_CONFIGURED", "message": "Database is not configured yet."})
     client_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "unknown")
     origin = request.headers.get("origin", "unknown")
@@ -100,3 +105,8 @@ app.add_exception_handler(HTTPException, http_exception_handler)  # type: ignore
 app.add_exception_handler(Exception, global_exception_handler)  # type: ignore
 app.add_exception_handler(QuotaLimitExceeded, quota_limit_exceeded_handler)  # type: ignore
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore
+
+
+@app.get("/health", include_in_schema=False)
+def health():
+    return {"status": "ok", "configured": {"database": bool(settings.DATABASE_URL), "ai": bool(settings.GEMINI_API_KEY), "clerk": bool(settings.CLERK_SECRET_KEY and settings.CLERK_JWKS_URL)}}

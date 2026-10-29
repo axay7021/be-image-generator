@@ -8,7 +8,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     APP_NAME: str = "fastapi templalte"
-    DEBUG: bool = True
+    DEBUG: bool = False
     ENVIRONMENT: str = "production"  # development or production
     RATE_LIMIT_DEFAULT: str = "10/minute"
     MCP_SERVER_URL: str = "http://localhost:8001/tools/mcp"

@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.core.settings import settings
 
 # Initialize Clerk client
-clerk_client = Clerk(bearer_auth=settings.CLERK_SECRET_KEY)
+clerk_client = Clerk(bearer_auth=settings.CLERK_SECRET_KEY) if settings.CLERK_SECRET_KEY else None
 
 # HTTP Bearer token scheme
 security = HTTPBearer()
@@ -50,16 +50,13 @@ async def get_clerk_user(
         # Method 1: Decode JWT and verify manually using JWKS
         # Clerk tokens are standard JWTs that can be verified using the issuer's JWKS
         try:
-            # First, decode without verification to get the issuer
-            decoded_unverified = jwt.decode(token, options={"verify_signature": False})
-
-            # Get the issuer from the token (e.g., https://clerk.your-domain.com)
-            issuer = decoded_unverified.get("iss")
-            if not issuer:
-                raise ValueError("Token missing issuer (iss) claim")
-
-            # Construct JWKS URL from issuer
-            jwks_url = f"{issuer}/.well-known/jwks.json"
+            # Trust only the configured Clerk instance, never a token-supplied URL.
+            from urllib.parse import urlparse
+            jwks_url = settings.CLERK_JWKS_URL
+            parsed = urlparse(jwks_url)
+            if parsed.scheme != "https" or not parsed.hostname or not parsed.path.endswith("/.well-known/jwks.json"):
+                raise HTTPException(status_code=503, detail="Clerk authentication is not configured")
+            issuer = jwks_url.removesuffix("/.well-known/jwks.json")
 
             # Import PyJWKClient for JWKS verification
             from jwt import PyJWKClient
@@ -73,6 +70,7 @@ async def get_clerk_user(
                 token,
                 signing_key.key,
                 algorithms=["RS256"],
+                issuer=issuer,
                 options={"verify_exp": True, "verify_aud": False},
             )
 
