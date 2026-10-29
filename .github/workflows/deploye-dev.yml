@@ -4,8 +4,7 @@
 name: Python CI/CD for Development Branch
 
 on:
-  push:
-    branches: ['dev']
+  workflow_dispatch:
 
 jobs:
   build:

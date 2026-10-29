@@ -4,8 +4,7 @@
 name: Python CI/CD for Production Branch
 
 on:
-  push:
-    branches: ['main']
+  workflow_dispatch:
 
 jobs:
   build:

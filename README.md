@@ -1,88 +1,37 @@
-# Barber Shop Appointment Agent
+# AI Image Generator — Backend
 
-An AI-powered voice agent for Barber Shop appointments, built with FastAPI, LiveKit, and Clean Architecture.
+FastAPI backend for the image-generation application, paired with [fe-image-generator](https://github.com/axay7021/fe-image-generator).
 
-## Features
+## What is implemented
 
-- 🤖 **AI Voice Agent** - Context-aware voice interaction using LiveKit & LLMs.
-- 📅 **Appointment Management** - Real-time booking, updating, and cancellation.
-- 🐳 **Docker Ready** - Fully containerized for production.
-- ✅ **Production Grade** - SQLAlchemy 2.0, Alembic, Pydantic v2, and Strict Linting.
-- 🔒 **Secure** - JWT Authentication and Rate Limiting.
+- Image processing and generation routes.
+- Clerk and JWT authentication integrations.
+- PostgreSQL models and Alembic migrations.
+- Subscription plans, usage quotas, payment integrations and administrative APIs.
 
-## Project Structure
-
-```
-.
-├── app/
-│   ├── agents/         # AI Agent Logic (LiveKit)
-│   ├── core/           # Config, Logging, Security
-│   ├── db/             # Database Session & Models
-│   ├── routers/        # API Endpoints
-│   ├── services/       # Business Logic
-│   └── main.py         # App Entry Point
-├── alembic/            # Database Migrations
-├── tests/              # Pytest Suite
-├── docker-compose.yml  # Local Development Setup
-├── Dockerfile          # Production Image
-└── pyproject.toml      # Dependencies & Tool Config
+```mermaid
+flowchart LR
+  UI[Next.js frontend] --> API[FastAPI]
+  API --> Auth[Clerk / JWT]
+  API --> DB[(PostgreSQL)]
+  API --> AI[Configured AI provider]
+  API --> Billing[Subscriptions and payments]
 ```
 
-## Quick Start (Docker)
+## Run locally
 
-The easiest way to run the project is with Docker Compose.
+Use Python 3.10+ and PostgreSQL. Copy `.env.example` to `.env`, configure the database, authentication and model credentials, and replace example secrets.
 
-1.  **Configure Environment**
-    Copy `.env.example` to `.env` (create one if missing) and set your keys.
-    ```bash
-    # See app/core/settings.py for required variables
-    APP_NAME="Barber Shop Agent"
-    DATABASE_URL="postgresql://postgres:postgres@db:5432/barber_db"
-    ```
-
-2.  **Run with Docker Compose**
-    ```bash
-    docker compose up --build
-    ```
-    - API: http://localhost:8000/docs
-    - DB: localhost:5432
-
-## Development (Local)
-
-1.  **Install `uv`** (modern python package manager)
-    ```bash
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-
-2.  **Install Dependencies**
-    ```bash
-    uv sync
-    ```
-
-3.  **Run Migrations**
-    ```bash
-    uv run alembic upgrade head
-    ```
-
-4.  **Run Server**
-    ```bash
-    uv run uvicorn app.main:app --reload
-    ```
-
-## Code Quality
-
-Run the following to check code quality:
-
-```bash
-# Linting
-uv run ruff check .
-
-# Formatting
-uv run ruff format .
-
-# Tests
-uv run pytest
+```sh
+uv sync
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Seed the Admin
-uv run python3 scripts/seed_admins.py
+API documentation: `http://localhost:8000/docs`. Consult `app/core/settings.py` for configuration options. Payment providers are needed only for the billing flows you use.
+
+## Portfolio presentation
+
+This backend and its frontend are **one portfolio project**, not two projects. The companion frontend includes a credential-free visual walkthrough: run `node scripts/serve-portfolio.mjs` there. It uses labelled illustrative assets rather than calling paid services.
+
+Source deployment workflows require manual execution and retain the original runner configuration for reference; configure your own infrastructure before using them.
