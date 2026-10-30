@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost/postgres"
+    DATABASE_REQUIRE_SSL: bool = False
 
     # JWT Configuration
     ADMIN_JWT_SECRET: str = "change_this_to_a_secure_secret_key"

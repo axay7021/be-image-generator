@@ -18,6 +18,7 @@ class Base(DeclarativeBase):
 
 engine: AsyncEngine = create_async_engine(
     (settings.DATABASE_URL or "postgresql://localhost/unconfigured").replace("postgresql", "postgresql+asyncpg", 1),
+    connect_args={"ssl": "require"} if settings.DATABASE_REQUIRE_SSL else {},
     pool_size=10,
     max_overflow=20,
     pool_timeout=30,

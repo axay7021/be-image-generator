@@ -24,6 +24,8 @@ db_url = settings.DATABASE_URL.replace("postgresql+asyncpg", "postgresql", 1)
 if "postgresql://" in db_url and "postgresql+asyncpg" not in db_url:
     # If it's already a plain postgresql URL, leave it as is
     pass
+if settings.DATABASE_REQUIRE_SSL and "sslmode=" not in db_url:
+    db_url += ("&" if "?" in db_url else "?") + "sslmode=require"
 config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
