@@ -23,6 +23,128 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Image Modification"])
 
+# Public catalog used by clients that want to browse examples before uploading an image.
+# The prompts still pass through the action-specific safety and identity-preservation
+# instructions in ``modify_image`` when a user generates an image.
+PROMPT_PRESETS: tuple[dict[str, object], ...] = (
+    {
+        "id": "passport-executive",
+        "title": "Executive ID portrait",
+        "description": "Tailored navy suit with clean, official styling.",
+        "transformation_type": "passport",
+        "action": "passport-size",
+        "passport_mode": "custom",
+        "prompt": "Create a professional passport-style portrait. Keep the person recognisable and centered, use a plain light background, even studio lighting, and a tailored navy business suit.",
+        "example_image": "/portfolio/sample-1.jpg",
+    },
+    {
+        "id": "passport-classic",
+        "title": "Classic formal portrait",
+        "description": "Neutral expression, white backdrop, and refined wardrobe.",
+        "transformation_type": "passport",
+        "action": "passport-size",
+        "passport_mode": "custom",
+        "prompt": "Create a refined, formal ID portrait with a neutral expression, a crisp white background, balanced frontal lighting, and conservative professional clothing.",
+        "example_image": "/portfolio/sample-2.jpg",
+    },
+    {
+        "id": "passport-evening",
+        "title": "Black-tie portrait",
+        "description": "A polished tuxedo look for formal profiles.",
+        "transformation_type": "passport",
+        "action": "passport-size",
+        "passport_mode": "custom",
+        "prompt": "Create a polished, formal portrait. Keep the face natural and recognisable, use a soft light-grey studio background, and dress the person in a classic black tuxedo with flattering studio lighting.",
+        "example_image": "/linkedin/1.png",
+    },
+    {
+        "id": "background-warm-office",
+        "title": "Warm office",
+        "description": "A bright, softly blurred workspace behind the subject.",
+        "transformation_type": "background",
+        "action": "change-bg",
+        "background_category": "custom",
+        "prompt": "Replace the background with a warm, modern office with natural window light, light wood details, and a softly blurred depth of field. Keep the person unchanged and sharply in focus.",
+        "example_image": "/hero-2.jpg",
+    },
+    {
+        "id": "background-studio-blue",
+        "title": "Blue studio gradient",
+        "description": "A clean blue gradient for a modern professional look.",
+        "transformation_type": "background",
+        "action": "change-bg",
+        "background_category": "custom",
+        "prompt": "Replace the background with a clean, premium studio gradient that shifts from deep navy to muted blue. Preserve the person exactly, with natural edge detail and soft portrait lighting.",
+        "example_image": "/linkedin/9.png",
+    },
+    {
+        "id": "background-city-evening",
+        "title": "City at dusk",
+        "description": "An elegant urban background with cinematic bokeh.",
+        "transformation_type": "background",
+        "action": "change-bg",
+        "background_category": "custom",
+        "prompt": "Replace the background with an elegant city scene at dusk, warm building lights, subtle cinematic bokeh, and a shallow depth of field. Keep the person natural and sharply in focus.",
+        "example_image": "/hero4.jpg",
+    },
+    {
+        "id": "remove-clutter",
+        "title": "Clear visual clutter",
+        "description": "Start with a template and name the distracting item to remove.",
+        "transformation_type": "remove",
+        "action": "remove-object",
+        "needs_personalization": True,
+        "prompt": "Remove the [object] from the image and reconstruct the surrounding area naturally.",
+        "example_image": "/hero-3.jpg",
+    },
+    {
+        "id": "remove-background-person",
+        "title": "Remove a background person",
+        "description": "Edit the placeholder with a clear description before generating.",
+        "transformation_type": "remove",
+        "action": "remove-object",
+        "needs_personalization": True,
+        "prompt": "Remove the [background person] from the image. Preserve the main subject and reconstruct the background naturally.",
+        "example_image": "/portfolio/sample-3.jpg",
+    },
+    {
+        "id": "prompt-editorial",
+        "title": "Editorial headshot",
+        "description": "Clean magazine-inspired portrait styling.",
+        "transformation_type": "prompt",
+        "action": "custom-edit",
+        "prompt": "Transform this into a premium editorial headshot with balanced studio lighting, a neutral textured backdrop, natural skin texture, and confident but approachable professional styling. Keep the person recognisable.",
+        "example_image": "/linkedin/4.png",
+    },
+    {
+        "id": "prompt-creative-gel",
+        "title": "Creative colour gel",
+        "description": "Modern purple-and-blue portrait lighting.",
+        "transformation_type": "prompt",
+        "action": "custom-edit",
+        "prompt": "Transform this into a creative studio portrait with subtle purple and blue colour-gel lighting, a dark minimal backdrop, crisp focus, and an editorial fashion-photography feel. Keep the person recognisable.",
+        "example_image": "/linkedin/3.png",
+    },
+    {
+        "id": "prompt-golden-hour",
+        "title": "Golden-hour outdoors",
+        "description": "Warm natural light and a softly blurred outdoor setting.",
+        "transformation_type": "prompt",
+        "action": "custom-edit",
+        "prompt": "Transform this into a warm golden-hour outdoor portrait with soft natural sunlight, gentle greenery in the distance, shallow depth of field, and realistic natural skin tones. Keep the person recognisable.",
+        "example_image": "/linkedin/7.png",
+    },
+    {
+        "id": "prompt-cinematic",
+        "title": "Cinematic monochrome",
+        "description": "A striking black-and-white professional portrait.",
+        "transformation_type": "prompt",
+        "action": "custom-edit",
+        "prompt": "Transform this into a sophisticated black-and-white cinematic portrait with directional studio lighting, rich contrast, a subtle dark background, and preserved facial detail. Keep the person recognisable.",
+        "example_image": "/linkedin/6.png",
+    },
+)
+
 # Initialize Gemini Client
 if not settings.GEMINI_API_KEY:
     logger.warning("GEMINI_API_KEY environment variable not set")
@@ -291,6 +413,16 @@ def process_gemini_image(input_image_bytes, prompt):
         "Failed to process image. Please try again with a different image.",
     )
     return None, cost_info, {"user_message": user_message, "is_policy_violation": is_policy_violation}
+
+
+@router.get("/presets")
+async def list_prompt_presets():
+    """Return the public, static prompt-preset catalog without requiring a database."""
+    return {
+        "presets": PROMPT_PRESETS,
+        "total": len(PROMPT_PRESETS),
+        "example_images_are_illustrative": True,
+    }
 
 
 @router.post("/validate-image")
@@ -799,4 +931,9 @@ async def modify_image(
         raise
     except Exception as e:
         logger.exception("Error processing image")
+        if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e) or "402" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="AI image generation service is temporarily at daily quota limit. Please try again later or add billing credits.",
+            ) from e
         raise HTTPException(status_code=500, detail=str(e)) from e
